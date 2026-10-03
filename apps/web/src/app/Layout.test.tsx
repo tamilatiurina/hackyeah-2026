@@ -35,9 +35,9 @@ describe('phone drawer', () => {
 
   it('closes when a nav item is picked', async () => {
     const user = await openMenu()
-    await user.click(screen.getByRole('link', { name: 'Policies' }))
+    await user.click(screen.getByRole('link', { name: 'Guardrails' }))
     expectClosed()
-    expect(screen.getByRole('heading', { level: 1, name: 'Policies' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Guardrails' })).toBeInTheDocument()
   })
 
   it('closes when the backdrop is clicked', async () => {

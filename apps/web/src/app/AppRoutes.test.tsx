@@ -2,13 +2,13 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { renderApp } from '../test/renderApp'
-import { NAV_ITEMS } from './nav'
+import { PANEL_NAV_ITEMS } from './nav'
 
 const mainNav = () => screen.getByRole('navigation', { name: 'Main' })
 const location = () => screen.getByTestId('location').textContent
 
 describe('AppRoutes', () => {
-  it.each(NAV_ITEMS.map((item) => [item.path, item.title] as const))(
+  it.each(PANEL_NAV_ITEMS.map((item) => [item.path, item.title] as const))(
     '%s renders the %s page',
     (path, title) => {
       renderApp(path)
@@ -21,7 +21,7 @@ describe('AppRoutes', () => {
     const labels = within(mainNav())
       .getAllByRole('link')
       .map((a) => a.textContent)
-    expect(labels).toEqual(NAV_ITEMS.map((i) => i.label))
+    expect(labels).toEqual(PANEL_NAV_ITEMS.map((i) => i.label))
   })
 
   it('redirects / to /sessions', () => {
@@ -68,9 +68,38 @@ describe('AppRoutes', () => {
 
   it('switching between Admin and Developer keeps the current page', async () => {
     const user = userEvent.setup()
-    renderApp('/policies')
+    renderApp('/agents')
     await user.click(screen.getByRole('button', { name: 'Developer' }))
-    expect(location()).toBe('/policies')
+    expect(location()).toBe('/agents')
     expect(screen.getByRole('button', { name: 'Developer' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('agent mode shows only the pi pages and hides panel pages', () => {
+    renderApp('/policies', 'admin', { mode: 'agent' })
+    expect(screen.getByRole('heading', { level: 1, name: 'Policies' })).toBeInTheDocument()
+    const labels = within(mainNav())
+      .getAllByRole('link')
+      .map((a) => a.textContent)
+    expect(labels).toEqual(['Playground', 'Policies'])
+  })
+
+  it('agent mode redirects panel deep links to the playground', () => {
+    renderApp('/agents', 'admin', { mode: 'agent' })
+    expect(location()).toBe('/playground')
+    expect(screen.getByRole('heading', { level: 1, name: 'Playground' })).toBeInTheDocument()
+  })
+
+  it('panel mode redirects /policies to the panel home (it lives in agent mode)', () => {
+    renderApp('/policies', 'admin', { mode: 'panel' })
+    expect(location()).toBe('/sessions')
+  })
+
+  it('switching to Agent Integrated goes to the playground and back to Agent Wrapped goes to Sessions', async () => {
+    const user = userEvent.setup()
+    renderApp('/fleet')
+    await user.click(screen.getByRole('button', { name: 'Agent Integrated' }))
+    expect(location()).toBe('/playground')
+    await user.click(screen.getByRole('button', { name: 'Agent Wrapped' }))
+    expect(location()).toBe('/sessions')
   })
 })

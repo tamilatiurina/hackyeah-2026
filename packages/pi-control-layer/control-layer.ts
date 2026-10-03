@@ -21,7 +21,7 @@ import { hostname } from "node:os";
 interface Rule { id: string; pattern: string; reason?: string; enabled?: boolean; timeoutSeconds?: number | null }
 interface RegexRule { id: string; regex: string; replacement?: string }
 interface AgentPolicy {
-  identity?: { agentName?: string; owner?: string };
+  identity?: { owner?: string };
   commands?: { banned?: Rule[]; approval?: Rule[]; outputRedact?: Rule[] };
   files?: { blocked?: Rule[]; redact?: Rule[]; approval?: Rule[] };
   budget?: { maxSessionCostUsd?: number; maxTurnCostUsd?: number; maxSessionTokens?: number; maxTurnTokens?: number; onExceed?: "block" | "warn" };
@@ -202,10 +202,12 @@ function findPolicyPath(ctx: ExtensionContext): string {
   return join(homedir(), ".pi", "policy.json");
 }
 
+// Agent id is the hostname, period. Policy keys under "agents" match hostnames.
+// PI_DEMO_HOST overrides the hostname for demo/testing runs (e.g. to simulate a
+// policy agent or a host that is absent from the policy, which means global defaults).
 function agentIdentity(ctx: ExtensionContext): string {
-  if (process.env.AGENT_NAME) return process.env.AGENT_NAME;
-  if (state.policy?.defaults?.identity?.agentName) return state.policy.defaults.identity.agentName;
-  return `${hostnameShort()}:${ctx.cwd.split("/").pop()}`;
+  if (process.env.PI_DEMO_HOST) return process.env.PI_DEMO_HOST;
+  return hostnameShort();
 }
 
 function hostnameShort(): string {
@@ -414,12 +416,17 @@ export default function (pi: ExtensionAPI) {
     state.sessionStart = Date.now();
     state.sessionCost = 0; state.sessionTokens = 0;
     state.sessionId = ctx.sessionManager.getSessionFile() ?? null;
-    loadPolicy(state.policyPath, ctx);
     state.agentId = agentIdentity(ctx);
+    loadPolicy(state.policyPath, ctx);
     recomputeMerged();
-    connectControlPlane(state.merged.controlPlane?.url, ctx);
-    startReconnect(ctx);
-    try { watchFile(state.policyPath, { interval: 1000 }, () => loadPolicy(state.policyPath, ctx)); } catch { /* polling not critical */ }
+    // In non-interactive runs (-p) the process must exit once the answer is printed.
+    // The websocket, its reconnect timer and the policy file poller keep the event
+    // loop alive, so only start them for interactive sessions.
+    if (ctx.hasUI) {
+      connectControlPlane(state.merged.controlPlane?.url, ctx);
+      startReconnect(ctx);
+      try { watchFile(state.policyPath, { interval: 1000 }, () => loadPolicy(state.policyPath, ctx)); } catch { /* polling not critical */ }
+    }
     wsSend({ type: "session_meta", agent: state.agentId, cwd: ctx.cwd, sessionId: state.sessionId, ts: new Date().toISOString() });
   });
 

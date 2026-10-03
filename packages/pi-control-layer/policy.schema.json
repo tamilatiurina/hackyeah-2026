@@ -14,7 +14,7 @@
     "defaults": { "$ref": "#/definitions/agentPolicy" },
     "agents": {
       "type": "object",
-      "description": "Per-agent policy overrides keyed by agent id/name (must match identity.agentName, AGENT_NAME env var, or the hostname:cwd fallback). Sections present here override the same section in 'defaults'; omitted sections inherit. Lists replace, never merge.",
+      "description": "Per-agent policy overrides keyed by hostname (must match the machine the pi agent runs on; short hostname). Sections present here override the same section in 'defaults'; omitted sections inherit. Lists replace, never merge.",
       "additionalProperties": { "$ref": "#/definitions/agentPolicy" }
     }
   },
@@ -27,12 +27,8 @@
         "identity": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Cosmetic metadata only. Agent identity comes from the hostname; policy keys under 'agents' reference hostnames.",
           "properties": {
-            "agentName": {
-              "type": "string",
-              "minLength": 1,
-              "description": "How this agent identifies itself to the dashboard / fleet view. Fallback chain: identity.agentName -> AGENT_NAME env var -> hostname:cwd."
-            },
             "owner": {
               "type": "string",
               "description": "Optional owner/team label used for grouping in the GUI."
@@ -52,6 +48,11 @@
               "type": "array",
               "items": { "$ref": "#/definitions/commandRule" },
               "description": "Commands matching these patterns require human approval (local confirm, or remote via dashboard)."
+            },
+            "outputRedact": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/commandRule" },
+              "description": "Commands whose stdout is matched against these glob patterns (comma-separated command, pattern applies to output): matching output is redacted before it reaches the model."
             }
           }
         },

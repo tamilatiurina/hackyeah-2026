@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.seeds import seed_signatures
 
-POLICY = Path(__file__).resolve().parents[3] / "packages" / "pi-control-layer" / "policy.json"
+POLICY = Path(__file__).resolve().parents[3] / ".pi" / "policy.json"
 
 
 def test_signature_seeds_match_policy_json() -> None:

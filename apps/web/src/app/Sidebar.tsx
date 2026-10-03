@@ -1,7 +1,8 @@
 import { NavLink, useNavigate } from 'react-router'
 import { useAuth } from '../auth/context'
 import { Brand } from './Brand'
-import { DEFAULT_HOME, TESTER_HOME, navItemsFor } from './nav'
+import { AGENT_HOME, DEFAULT_HOME, TESTER_HOME, navItemsFor } from './nav'
+import { MODES, useMode, type Mode } from './mode'
 import { ROLES, useRole, type Role } from './role'
 
 interface SidebarProps {
@@ -14,6 +15,7 @@ interface SidebarProps {
 export function Sidebar({ id, open, onNavigate, counts = {} }: SidebarProps) {
   const { role, setRole } = useRole()
   const { session, signOut } = useAuth()
+  const { mode, setMode } = useMode()
   const navigate = useNavigate()
   const note = ROLES.find((r) => r.id === role)?.note
 
@@ -26,6 +28,14 @@ export function Sidebar({ id, open, onNavigate, counts = {} }: SidebarProps) {
     onNavigate()
   }
 
+  const pickMode = (next: Mode) => {
+    if (next !== mode) {
+      setMode(next)
+      navigate(next === 'agent' ? AGENT_HOME : DEFAULT_HOME)
+    }
+    onNavigate()
+  }
+
   return (
     <aside
       id={id}
@@ -34,9 +44,33 @@ export function Sidebar({ id, open, onNavigate, counts = {} }: SidebarProps) {
         open ? 'translate-x-0' : 'max-md:invisible -translate-x-full'
       }`}
     >
-      <Brand />
+      <Brand subtitle={mode === 'agent' ? 'Agent Integrated' : 'Agent Wrapped'} />
+
+      {/* context switch: Agent Integrated vs Agent Wrapped — above page nav, below the brand */}
+      <div
+        role="group"
+        aria-label="View context"
+        className="flex gap-1 rounded-[10px] bg-sidebar-track p-1"
+      >
+        {MODES.map((m) => {
+          const on = m.id === mode
+          return (
+            <button
+              key={m.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => pickMode(m.id)}
+              className={`min-h-11 flex-1 cursor-pointer rounded-[7px] border-0 px-1.5 text-xs font-semibold ${
+                on ? 'bg-white text-sidebar' : 'bg-transparent text-sidebar-muted hover:text-white'
+              }`}
+            >
+              {m.label}
+            </button>
+          )
+        })}
+      </div>
       <nav aria-label="Main" className="flex flex-col gap-1">
-        {navItemsFor(role).map((item) => {
+        {navItemsFor(role, mode).map((item) => {
           const count = counts[item.path] ?? 0
           return (
             <NavLink
@@ -61,53 +95,80 @@ export function Sidebar({ id, open, onNavigate, counts = {} }: SidebarProps) {
           )
         })}
       </nav>
-      <div className="mt-auto flex flex-col gap-2 px-2">
-        {session && (
-          <div className="flex flex-col gap-2 border-b border-sidebar-track pb-4">
-            <span className="truncate text-xs text-sidebar-subtle" title={session.email || undefined}>
-              {session.anonymous ? 'Guest session' : session.email}
-            </span>
-            {!session.anonymous && (
-              <button
-                type="button"
-                onClick={() => {
-                  onNavigate()
-                  void signOut()
-                }}
-                className="min-h-11 cursor-pointer rounded-lg border border-sidebar-track bg-transparent px-3 text-left text-sm font-medium text-sidebar-muted hover:bg-sidebar-active hover:text-white"
-              >
-                Sign out
-              </button>
-            )}
-          </div>
-        )}
-        <span id={`${id}-role-label`} className="text-xs tracking-[0.06em] text-sidebar-subtle uppercase">
-          Viewing as
-        </span>
-        <div
-          role="group"
-          aria-labelledby={`${id}-role-label`}
-          className="flex gap-1 rounded-[10px] bg-sidebar-track p-1"
-        >
-          {ROLES.map((r) => {
-            const on = r.id === role
-            return (
-              <button
-                key={r.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => pickRole(r.id)}
-                className={`min-h-11 flex-1 cursor-pointer rounded-[7px] border-0 px-1.5 text-xs font-semibold ${
-                  on ? 'bg-white text-sidebar' : 'bg-transparent text-sidebar-muted hover:text-white'
-                }`}
-              >
-                {r.label}
-              </button>
-            )
-          })}
+      {mode === 'agent' ? (
+        <div className="mt-auto flex flex-col gap-2 px-2">
+          {session && (
+            <div className="flex flex-col gap-2 border-b border-sidebar-track pb-4">
+              <span className="truncate text-xs text-sidebar-subtle" title={session.email || undefined}>
+                {session.anonymous ? 'Guest session' : session.email}
+              </span>
+              {!session.anonymous && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate()
+                    void signOut()
+                  }}
+                  className="min-h-11 cursor-pointer rounded-lg border border-sidebar-track bg-transparent px-3 text-left text-sm font-medium text-sidebar-muted hover:bg-sidebar-active hover:text-white"
+                >
+                  Sign out
+                </button>
+              )}
+            </div>
+          )}
+          <p className="m-0 text-xs leading-[1.45] text-sidebar-subtle">
+            Direct agent harness integration. Enforces the policy directly, host dependent.
+          </p>
         </div>
-        <p className="m-0 text-xs leading-[1.45] text-sidebar-subtle">{note}</p>
-      </div>
+      ) : (
+        <div className="mt-auto flex flex-col gap-2 px-2">
+          {session && (
+            <div className="flex flex-col gap-2 border-b border-sidebar-track pb-4">
+              <span className="truncate text-xs text-sidebar-subtle" title={session.email || undefined}>
+                {session.anonymous ? 'Guest session' : session.email}
+              </span>
+              {!session.anonymous && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate()
+                    void signOut()
+                  }}
+                  className="min-h-11 cursor-pointer rounded-lg border border-sidebar-track bg-transparent px-3 text-left text-sm font-medium text-sidebar-muted hover:bg-sidebar-active hover:text-white"
+                >
+                  Sign out
+                </button>
+              )}
+            </div>
+          )}
+          <span id={`${id}-role-label`} className="text-xs tracking-[0.06em] text-sidebar-subtle uppercase">
+            Viewing as
+          </span>
+          <div
+            role="group"
+            aria-labelledby={`${id}-role-label`}
+            className="flex gap-1 rounded-[10px] bg-sidebar-track p-1"
+          >
+            {ROLES.map((r) => {
+              const on = r.id === role
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => pickRole(r.id)}
+                  className={`min-h-11 flex-1 cursor-pointer rounded-[7px] border-0 px-1.5 text-xs font-semibold ${
+                    on ? 'bg-white text-sidebar' : 'bg-transparent text-sidebar-muted hover:text-white'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="m-0 text-xs leading-[1.45] text-sidebar-subtle">{note}</p>
+        </div>
+      )}
     </aside>
   )
 }
