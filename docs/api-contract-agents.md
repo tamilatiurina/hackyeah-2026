@@ -99,3 +99,64 @@ slice).
 
 The web app treats a 404/405 from these endpoints as "not implemented yet". The A2A shapes follow
 `docs/agent-contract-a2a.md`.
+
+## A-07: audit log and sessions (FR-28, FR-36) — implemented
+
+All need the signed-in user's Bearer token (401 without one when Supabase is configured). Rows are
+limited by RLS to the caller's own agents. Errors: 401, 422 (bad filter value or cursor), 503
+(storage unavailable). Paging is opaque: pass `next_cursor` back as `before`.
+
+### `GET /api/v1/audit-events`
+
+Query (all optional, combined with AND): `agent_id`, `rule_id`, `action` (`block` | `redact` |
+`warn`), `kind` (`guardrail` | `limit`), `context_id`, `limit` (1–200, default 50), `before`.
+Newest first.
+
+```json
+{
+  "data": [
+    {
+      "id": "…", "at": "2026-10-04T10:09:00Z", "agent_id": "…", "agent_name": "Support Assistant",
+      "context_id": "ctx-…", "rule_id": "maxSessionTokens", "rule_name": "Session tokens",
+      "kind": "limit", "stage": null, "action": "block", "config_version": "…",
+      "details": "Session token cap reached"
+    }
+  ],
+  "next_cursor": "…"
+}
+```
+
+### `GET /api/v1/audit-events/rules`
+
+The distinct `{ rule_id, rule_name, kind }` seen in the caller's events, guardrails first, then
+limits, each by name. Feeds the Rule filter.
+
+### `GET /api/v1/sessions`
+
+Query: `agent_id`, `status` (`active` | `stopped`), `limit`, `before`. Most recent activity first.
+`Session = { agent_id, agent_name, context_id, turns, input_tokens, output_tokens, cost_usd,
+started_at, last_at, duration_seconds, status, stop_reason, events, limits }`. `events` counts the
+session's audit events; `limits` (`{ name, used, max, unit }`) stays `[]` until B-05.
+
+No message content is stored: sessions hold counters, events hold the rule and a short reason.
+
+### Reporting hits (B-02, B-05, B-06)
+
+The gateway already counts every forwarded turn and its tokens (`metadata.usage`) per `contextId`.
+Report every block, redaction, warning and limit hit through the recorder, never by writing the
+tables directly:
+
+```python
+from app.audit.models import AuditEventIn
+from app.audit.recorder import AuditRecorder, get_audit_recorder  # FastAPI dependency
+
+recorder.record_events(agent_id, gateway_key, context_id, [
+    AuditEventIn(rule_id=g.id, rule_name=g.name, kind="guardrail", stage="input",
+                 action="block", config_version=effective.version, details=reason),
+])
+```
+
+A `kind="limit"` event with `action="block"` marks the session stopped, with `details` as the
+reason. `details` is the reason only (≤ 500 chars), never message text. With Supabase the recorder
+calls the `gateway_record_turn` / `gateway_record_events` functions, which check the gateway key
+hash. B-05 adds cost and fills `Session.limits`.
