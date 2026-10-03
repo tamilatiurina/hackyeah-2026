@@ -5,6 +5,8 @@ import { useAgents } from '../../api/agents'
 import { ApiError } from '../../api/client'
 import { newContextId, useSendTestMessage } from '../../api/testChat'
 import { badgeClass, buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
+import { FlagReply } from './FlagReply'
+import { TracePanel } from './TracePanel'
 
 const CHIPS = ['#pii', '#secret', '#inject', '#toxic', '#offtopic']
 const ENDPOINT_MISSING = "The test chat endpoint isn't available on this API yet (B-06)."
@@ -36,6 +38,7 @@ export function TestChatPage() {
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [endpointMissing, setEndpointMissing] = useState(false)
+  const [showTrace, setShowTrace] = useState(false)
   const sendMessage = useSendTestMessage(agentId)
   const currentContext = useRef(contextId)
   const turnCounter = useRef(0)
@@ -167,6 +170,7 @@ export function TestChatPage() {
                   onSelect={() => setSelectedTurnId(turn.id)}
                   onRetry={() => send(turn.userText, turn)}
                   retryDisabled={!canSend}
+                  agentId={agentId}
                 />
               ))}
             </ol>
@@ -209,7 +213,19 @@ export function TestChatPage() {
             </form>
           </div>
 
-          <aside className="min-w-0" data-selected-reply={selected?.reply?.messageId ?? ''} />
+          <div className="flex min-w-0 flex-col gap-2">
+            <button
+              type="button"
+              aria-expanded={showTrace}
+              onClick={() => setShowTrace((v) => !v)}
+              className={`${buttonSecondary} lg:hidden`}
+            >
+              {showTrace ? 'Hide trace' : 'Show trace'}
+            </button>
+            <aside className={`${showTrace ? '' : 'max-lg:hidden'} min-w-0`}>
+              <TracePanel reply={selected?.reply ?? null} />
+            </aside>
+          </div>
         </div>
       )}
     </section>
@@ -223,9 +239,10 @@ interface TurnViewProps {
   onSelect: () => void
   onRetry: () => void
   retryDisabled: boolean
+  agentId: string
 }
 
-function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled }: TurnViewProps) {
+function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled, agentId }: TurnViewProps) {
   const reply = turn.reply
   const verdict = turn.status === 'failed' ? VERDICTS.error : reply ? VERDICTS[reply.verdict] : null
   const errorText = turn.failure ?? reply?.errorMessage
@@ -264,6 +281,14 @@ function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled }: 
                 >
                   Inspect
                 </button>
+              )}
+              {reply && reply.verdict !== 'error' && (
+                <FlagReply
+                  agentId={agentId}
+                  contextId={turn.contextId}
+                  messageId={reply.messageId}
+                  label={`Flag reply ${number}`}
+                />
               )}
               {errorText && (
                 <button type="button" disabled={retryDisabled} onClick={onRetry} className={`${buttonSecondary} px-3 text-xs`}>
