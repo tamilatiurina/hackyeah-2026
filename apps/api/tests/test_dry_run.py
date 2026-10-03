@@ -132,3 +132,35 @@ def test_dry_run_validates_the_rule_and_text() -> None:
     assert client.post(URL, json=bad_engine).status_code == 422
     empty = {**bad_engine, "engine": "moderation", "text": ""}
     assert client.post(URL, json=empty).status_code == 422
+
+
+def test_regex_replacement_is_literal_text() -> None:
+    config = {"template": "regex", "pattern": r"\d{4}", "replacement": "C:\\data \\1"}
+    r = dry("regex", "redact", config, "pin 1234")
+    assert r["output"] == "pin C:\\data \\1"
+
+
+def test_pathological_pattern_times_out_with_422() -> None:
+    body = {
+        "engine": "regex",
+        "stages": ["input"],
+        "action": "block",
+        "config": {"template": "regex", "pattern": "(a|aa)+$"},
+        "text": "a" * 60 + "b",
+    }
+    r = client.post(URL, json=body)
+    assert r.status_code == 422
+    assert r.json() == {"detail": "Pattern took too long to run on this text"}
+
+
+def test_classic_backtracking_pattern_no_longer_stalls() -> None:
+    # (a+)+$ hangs plain re for seconds; the regex engine resolves it immediately.
+    r = dry("regex", "block", {"template": "regex", "pattern": "(a+)+$"}, "a" * 40 + "b")
+    assert r["result"] == "pass"
+
+
+def test_pii_spaced_ibans_are_one_iban() -> None:
+    for iban in ("PL61 1090 1014 0000 0712 1981 2874", "DE89 3704 0044 0532 0130 00"):
+        r = dry("library", "redact", {"template": "pii"}, f"IBAN {iban}")
+        assert r["reason"] == "Found IBAN", iban
+        assert r["output"] == "IBAN [IBAN]", iban

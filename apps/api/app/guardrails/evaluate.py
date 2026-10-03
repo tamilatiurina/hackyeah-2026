@@ -7,6 +7,8 @@ no model behind them yet, so their verdicts are keyword heuristics marked simula
 import re
 from collections.abc import Sequence
 
+import regex
+
 from app.guardrails.models import (
     DryRunResult,
     GuardrailRule,
@@ -22,11 +24,37 @@ from app.guardrails.models import (
 # Order matters: longer, more specific entities are redacted first so their digits are not
 # reported again as a PHONE.
 PII_PATTERNS: dict[str, re.Pattern[str]] = {
-    "IBAN": re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b"),
+    # Compact or printed in groups: "DE89370400440532013000" or "DE89 3704 0044 0532 0130 00".
+    "IBAN": re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b"),
     "CREDIT_CARD": re.compile(r"\b(?:\d[ -]?){12,18}\d\b"),
     "EMAIL": re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),
     "PHONE": re.compile(r"\+?\d[\d\s-]{7,}\d"),
 }
+
+# User-supplied patterns run with a deadline: the regex package can stop a catastrophic backtrack,
+# plain re cannot (and it holds the GIL while it spins).
+PATTERN_TIMEOUT_S = 1.0
+
+
+class PatternTimeoutError(Exception):
+    """A user-supplied pattern ran past PATTERN_TIMEOUT_S."""
+
+
+def _search(pattern: str, text: str) -> bool:
+    try:
+        return regex.search(pattern, text, timeout=PATTERN_TIMEOUT_S) is not None
+    except TimeoutError as e:
+        raise PatternTimeoutError from e
+
+
+def _replace_literal(pattern: str, replacement: str, text: str) -> str:
+    # A function replacement inserts the text as-is: no backslash or group template expansion.
+    try:
+        result: str = regex.sub(pattern, lambda _: replacement, text, timeout=PATTERN_TIMEOUT_S)
+    except TimeoutError as e:
+        raise PatternTimeoutError from e
+    return result
+
 
 TOXIC_WORDS = ["idiot", "stupid", "moron", "shut up", "hate you", "useless"]
 
@@ -84,16 +112,16 @@ def evaluate(
 
     config = rule.config
     if isinstance(config, RegexConfig):
-        if re.search(config.pattern, text):
+        if _search(config.pattern, text):
             reason = f"Matched /{config.pattern}/"
-            redacted = re.sub(config.pattern, config.replacement, text)
+            redacted = _replace_literal(config.pattern, config.replacement, text)
     elif isinstance(config, PiiConfig):
         found, pii_redacted = _pii(config, text)
         if found:
             reason = f"Found {', '.join(found)}"
             redacted = pii_redacted
     elif isinstance(config, PromptInjectionConfig):
-        ids = [s.id for s in signatures if re.search(s.regex, text)]
+        ids = [s.id for s in signatures if _search(s.regex, text)]
         if ids:
             reason = f"Matched injection signature: {', '.join(ids)}"
     elif isinstance(config, ToxicityConfig):

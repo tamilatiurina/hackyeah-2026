@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from app.guardrails.evaluate import evaluate
+from app.guardrails.evaluate import PatternTimeoutError, evaluate
 from app.guardrails.models import (
     TEMPLATES,
     DryRunRequest,
@@ -43,7 +43,13 @@ def create_guardrail(body: GuardrailCreate) -> Guardrail:
 
 @router.post("/guardrails/dry-run")
 def dry_run(body: DryRunRequest) -> DryRunResult:
-    return evaluate(body, body.text, list(store.signatures.values()))
+    try:
+        return evaluate(body, body.text, list(store.signatures.values()))
+    except PatternTimeoutError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Pattern took too long to run on this text",
+        ) from e
 
 
 @router.get("/guardrails/{guardrail_id}")
