@@ -1,3 +1,4 @@
+import contextlib
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
@@ -20,11 +21,14 @@ from app.api.routes.agents.models import (
     AgentCard,
     AgentList,
     AgentRegistration,
+    AgentUpdate,
 )
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
-_PUBLIC_AGENT_COLUMNS = "id,name,description,base_url,upstream_url,auth_header_name,agent_card"
+_PUBLIC_AGENT_COLUMNS = (
+    "id,name,description,base_url,upstream_url,auth_header_name,agent_card,config_version"
+)
 _PUBLIC_FIELDS = set(_PUBLIC_AGENT_COLUMNS.split(","))
 _MAX_CARD_BYTES = 256_000
 
@@ -99,6 +103,7 @@ def _database_row(
     return {
         "id": agent_id,
         "owner_id": owner_id,
+        "config_version": 1,
         "name": registration.name if registration.name is not None else card.name[:100],
         "description": (
             registration.description
@@ -163,29 +168,7 @@ async def register_agent(
     )
     card, snapshot = await fetch_agent_card(client, registration.base_url, headers)
 
-    try:
-        request = client.build_request(
-            "GET",
-            upstream.url,
-            headers=headers,
-            extensions={"sni_hostname": upstream.sni_hostname},
-        )
-        request.headers["Host"] = upstream.host_header
-        response = await client.send(request)
-    except httpx.HTTPError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Upstream agent did not respond successfully",
-        ) from error
-    # Any answer below 500 means the agent is up. A chat endpoint often only accepts POST,
-    # so a GET there answers 405 (e.g. the demo agent's /chat); that still counts as reachable.
-    if response.status_code >= 500:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Upstream agent did not respond successfully",
-        )
-
-    row = _database_row(agent_id, database.owner_id, registration)
+    row = _database_row(agent_id, database.owner_id, registration, card, snapshot)
     try:
         await run_in_threadpool(lambda: database.client.table("agents").insert(row).execute())
     except APIError as error:
@@ -245,3 +228,132 @@ async def get_agent(
         return Agent.model_validate(response.data[0])
     except ValidationError as error:
         raise _database_error() from error
+
+
+_SECRET_AGENT_COLUMNS = f"{_PUBLIC_AGENT_COLUMNS},auth_header_value"
+
+
+def _agent_not_found() -> HTTPException:
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+
+@router.patch("/{agent_id}", response_model=Agent)
+async def update_agent(
+    agent_id: UUID,
+    changes: AgentUpdate,
+    client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
+    database: Annotated[AgentDatabase, Depends(get_agent_database)],
+) -> Agent:
+    """FR-02: edit an agent. A saved change bumps `config_version`; a no-op does not.
+
+    Row level security limits this to the owner: someone else's agent is simply not found.
+    """
+    try:
+        response = await run_in_threadpool(
+            lambda: (
+                database.client.table("agents")
+                .select(_SECRET_AGENT_COLUMNS)
+                .eq("id", str(agent_id))
+                .limit(1)
+                .execute()
+            )
+        )
+    except (APIError, httpx.HTTPError) as error:
+        raise _database_error() from error
+    if not response.data:
+        raise _agent_not_found()
+    current: dict[str, JSON] = response.data[0]
+
+    sent = changes.model_fields_set
+    new_values: dict[str, JSON] = {}
+    if changes.name is not None and changes.name != current["name"]:
+        new_values["name"] = changes.name
+    if changes.description is not None and changes.description != current["description"]:
+        new_values["description"] = changes.description
+    if "auth_header" in sent:
+        if changes.auth_header is None:
+            new_values["auth_header_name"] = None
+            new_values["auth_header_value"] = None
+        else:
+            new_values["auth_header_name"] = changes.auth_header.name
+            new_values["auth_header_value"] = changes.auth_header.value.get_secret_value()
+
+    if changes.base_url is not None and str(changes.base_url) != current["base_url"]:
+        # The new URL must serve a valid A2A 1.0 Agent Card, fetched with the credentials
+        # the agent will have after this edit.
+        header_name = new_values.get("auth_header_name", current["auth_header_name"])
+        header_value = new_values.get("auth_header_value", current.get("auth_header_value"))
+        headers = (
+            {str(header_name): str(header_value)}
+            if header_name is not None and header_value is not None
+            else None
+        )
+        card, snapshot = await fetch_agent_card(client, changes.base_url, headers)
+        interface = card.jsonrpc_interface()
+        assert interface is not None  # checked by fetch_agent_card
+        new_values["base_url"] = str(changes.base_url)
+        new_values["upstream_url"] = str(interface.url)
+        new_values["agent_card"] = snapshot
+
+    # Only a real difference creates a new version.
+    new_values = {key: value for key, value in new_values.items() if current.get(key) != value}
+    if not new_values:
+        return _public_agent(current)
+
+    version = current["config_version"]
+    assert isinstance(version, int)
+    new_values["config_version"] = version + 1
+    try:
+        # Guarded on the version we read: a concurrent edit makes this match nothing.
+        result = await run_in_threadpool(
+            lambda: (
+                database.client.table("agents")
+                .update(new_values)
+                .eq("id", str(agent_id))
+                .eq("config_version", version)
+                .execute()
+            )
+        )
+    except APIError as error:
+        raise _agent_insert_error(error) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not save agent"
+        ) from error
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The agent was changed by someone else; reload and try again",
+        )
+    return _public_agent(result.data[0])
+
+
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_agent(
+    agent_id: UUID,
+    database: Annotated[AgentDatabase, Depends(get_agent_database)],
+) -> None:
+    """FR-02: delete an agent and the guardrail bindings attached to it."""
+    try:
+        response = await run_in_threadpool(
+            lambda: database.client.table("agents").delete().eq("id", str(agent_id)).execute()
+        )
+    except (APIError, httpx.HTTPError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not delete agent"
+        ) from error
+    if not response.data:
+        raise _agent_not_found()  # missing, or not owned by the caller (row level security)
+
+    # Bindings go after the agent so that deleting someone else's agent can never reach them.
+    # A leftover binding is harmless (agent ids are never reused), so a failure here is ignored.
+    with contextlib.suppress(APIError, httpx.HTTPError):
+        await run_in_threadpool(
+            lambda: (
+                database.client.table("rule_bindings")
+                .delete()
+                .eq("scope_type", "agent")
+                .eq("scope_id", str(agent_id))
+                .execute()
+            )
+        )

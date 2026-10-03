@@ -127,12 +127,14 @@ def test_register_agent_reads_the_agent_card_and_hides_auth_value() -> None:
         "upstream_url": "https://agent.example.com/a2a",
         "auth_header_name": "Authorization",
         "agent_card": _card(),
+        "config_version": 1,
     }
     database_client.table.assert_called_once_with("agents")
     database_client.table.return_value.insert.assert_called_once_with(
         {
             "id": agent_id,
             "owner_id": OWNER_ID,
+            "config_version": 1,
             "name": "Support agent",
             "description": "Answers customer questions",
             "base_url": "https://agent.example.com/support",
@@ -319,6 +321,7 @@ _STORED_ROW = {
     "upstream_url": "https://agent.example.com/a2a",
     "auth_header_name": "Authorization",
     "agent_card": _card(),
+    "config_version": 1,
 }
 
 
@@ -432,3 +435,155 @@ def test_public_upstream_is_pinned_to_validated_address(
     assert resolved.url == httpx.URL("https://93.184.216.34/health")
     assert resolved.host_header == "agent.example.com"
     assert resolved.sni_hostname == "agent.example.com"
+
+
+# --- FR-02: edit and delete ---
+
+AGENT_ID = "7b4eb987-4315-4745-83c7-258061f2f2c4"
+AGENT_URL = f"/api/v1/agents/{AGENT_ID}"
+_STORED_WITH_SECRET = {**_STORED_ROW, "auth_header_value": "Bearer secret"}
+
+
+def _patch_setup(
+    current: dict[str, Any] | None = None,
+    saved: list[dict[str, Any]] | None = None,
+    http: Callable[[httpx.Request], httpx.Response] | None = None,
+) -> MagicMock:
+    database_client, database = _database()
+    table = database_client.table.return_value
+    read = table.select.return_value.eq.return_value.limit.return_value
+    read.execute.return_value.data = [current] if current is not None else []
+    update = table.update.return_value.eq.return_value.eq.return_value
+    update.execute.return_value.data = saved if saved is not None else []
+    app.dependency_overrides[get_agent_database] = lambda: database
+    app.dependency_overrides[get_http_client] = _client_override(http or _serve_card())
+    return database_client
+
+
+def test_patch_agent_saves_the_change_and_bumps_the_version() -> None:
+    saved = {**_STORED_ROW, "name": "Renamed", "config_version": 2}
+    database_client = _patch_setup(_STORED_WITH_SECRET, [saved])
+
+    response = client.patch(AGENT_URL, json={"name": "Renamed"})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Renamed"
+    assert response.json()["config_version"] == 2
+    assert "auth_header_value" not in response.json()
+    table = database_client.table.return_value
+    table.update.assert_called_once_with({"name": "Renamed", "config_version": 2})
+    # the write only matches the version that was read: a concurrent edit changes nothing
+    table.update.return_value.eq.return_value.eq.assert_called_once_with("config_version", 1)
+
+
+def test_patch_agent_without_a_real_change_keeps_the_version() -> None:
+    database_client = _patch_setup(_STORED_WITH_SECRET)
+
+    response = client.patch(
+        AGENT_URL, json={"name": "Support agent", "description": "Answers customer questions"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["config_version"] == 1
+    database_client.table.return_value.update.assert_not_called()
+
+
+def test_patch_agent_replaces_and_removes_the_auth_header() -> None:
+    database_client = _patch_setup(_STORED_WITH_SECRET, [{**_STORED_ROW, "config_version": 2}])
+    client.patch(AGENT_URL, json={"auth_header": {"name": "X-Key", "value": "k"}})
+    update = database_client.table.return_value.update
+    update.assert_called_once_with(
+        {"auth_header_name": "X-Key", "auth_header_value": "k", "config_version": 2}
+    )
+
+    database_client = _patch_setup(_STORED_WITH_SECRET, [{**_STORED_ROW, "config_version": 2}])
+    client.patch(AGENT_URL, json={"auth_header": None})
+    database_client.table.return_value.update.assert_called_once_with(
+        {"auth_header_name": None, "auth_header_value": None, "config_version": 2}
+    )
+
+
+def test_patch_agent_new_base_url_refetches_the_card_with_the_stored_credentials() -> None:
+    seen: list[httpx.Request] = []
+    card = _card(
+        supportedInterfaces=[
+            {
+                "url": "https://new.example.com/a2a",
+                "protocolBinding": "JSONRPC",
+                "protocolVersion": "1.0",
+            }
+        ]
+    )
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=card)
+
+    database_client = _patch_setup(
+        _STORED_WITH_SECRET, [{**_STORED_ROW, "config_version": 2}], upstream
+    )
+
+    response = client.patch(AGENT_URL, json={"base_url": "https://new.example.com"})
+
+    assert response.status_code == 200
+    assert seen[0].headers["authorization"] == "Bearer secret"
+    written = database_client.table.return_value.update.call_args.args[0]
+    assert written["base_url"] == "https://new.example.com/"
+    assert written["upstream_url"] == "https://new.example.com/a2a"
+    assert written["agent_card"] == card
+
+
+def test_patch_agent_rejects_a_base_url_without_an_agent_card() -> None:
+    database_client = _patch_setup(_STORED_WITH_SECRET, http=_serve_card(status_code=404))
+
+    response = client.patch(AGENT_URL, json={"base_url": "https://new.example.com"})
+
+    assert response.status_code == 502
+    database_client.table.return_value.update.assert_not_called()
+
+
+def test_patch_agent_maps_unknown_agent_duplicate_name_and_conflict() -> None:
+    _patch_setup(None)
+    assert client.patch(AGENT_URL, json={"name": "x"}).status_code == 404
+
+    database_client = _patch_setup(_STORED_WITH_SECRET)
+    update = database_client.table.return_value.update.return_value.eq.return_value.eq.return_value
+    update.execute.side_effect = APIError({"code": "23505", "message": "dup"})
+    assert client.patch(AGENT_URL, json={"name": "Taken"}).status_code == 409
+
+    _patch_setup(_STORED_WITH_SECRET, [])  # nothing matched the version: edited meanwhile
+    assert client.patch(AGENT_URL, json={"name": "Other"}).status_code == 409
+
+
+def test_patch_agent_validates_the_body() -> None:
+    _patch_setup(_STORED_WITH_SECRET)
+    assert client.patch(AGENT_URL, json={"name": None}).status_code == 422
+    assert client.patch(AGENT_URL, json={"name": ""}).status_code == 422
+    assert client.patch(AGENT_URL, json={"base_url": "not a url"}).status_code == 422
+
+
+def test_delete_agent_removes_it_and_its_bindings() -> None:
+    database_client, database = _database()
+    table = database_client.table
+    table.return_value.delete.return_value.eq.return_value.execute.return_value.data = [
+        {"id": AGENT_ID}
+    ]
+    app.dependency_overrides[get_agent_database] = lambda: database
+
+    response = client.delete(AGENT_URL)
+
+    assert response.status_code == 204
+    assert [call.args[0] for call in table.call_args_list] == ["agents", "rule_bindings"]
+    bindings = table.return_value.delete.return_value.eq
+    bindings.assert_any_call("scope_type", "agent")
+    bindings.return_value.eq.assert_any_call("scope_id", AGENT_ID)
+
+
+def test_delete_agent_that_is_missing_or_not_owned_is_404_and_leaves_bindings_alone() -> None:
+    database_client, database = _database()
+    table = database_client.table
+    table.return_value.delete.return_value.eq.return_value.execute.return_value.data = []
+    app.dependency_overrides[get_agent_database] = lambda: database
+
+    assert client.delete(AGENT_URL).status_code == 404
+    table.assert_called_once_with("agents")

@@ -19,7 +19,7 @@ The agent page uses the bindings API as built in `apps/api/app/api/routes/bindin
 Guardrails with `is_mandatory: true` are shown as "Always applied" and never offered for attaching.
 Role and user scopes exist in the API; the agent page only manages the agent scope.
 
-## FR-02: edit and delete an agent — proposed, not implemented yet
+## FR-02: edit and delete an agent — implemented
 
 ```ts
 interface AgentUpdate {              // PATCH body; every field optional
@@ -32,12 +32,12 @@ interface AgentUpdate {              // PATCH body; every field optional
 
 | Call | Success | Errors |
 |---|---|---|
-| `GET /agents/{id}` | 200 `Agent` (may include `config_version`) | 404 "Agent not found"; 422 malformed id |
-| `PATCH /agents/{id}` | 200 `Agent`, `config_version` + 1 | 404; 409 "An agent with this name already exists"; 422 validation; 502 when a changed `base_url` has no readable A2A 1.0 Agent Card (the detail says why) |
+| `GET /agents/{id}` | 200 `Agent` (includes `config_version`) | 404 "Agent not found"; 422 malformed id |
+| `PATCH /agents/{id}` | 200 `Agent`; `config_version` + 1 only when something actually changed | 404 (also for another owner's agent); 409 when the agent was edited meanwhile (the write is guarded on the version read); 409 "An agent with this name already exists"; 422 validation; 502 when a changed `base_url` has no readable A2A 1.0 Agent Card (the detail says why) |
 | `DELETE /agents/{id}` (also removes the agent's bindings) | 204 | 404 |
 
-Until these exist the web app shows "Editing agents / Deleting agents isn't available on this API yet."
-(it treats 405 as "not implemented").
+Only the owner can edit or delete an agent (row level security); anyone else gets 404. Admin override of other
+people's agents is not built yet. The version is a counter only; there is no history table (FR-09 would need one).
 
 ## B-06: test chat — proposed
 

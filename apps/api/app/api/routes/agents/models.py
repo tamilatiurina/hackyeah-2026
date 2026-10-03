@@ -1,7 +1,15 @@
 import re
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, SecretStr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 _HEADER_NAME = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
@@ -102,6 +110,25 @@ class AgentRegistration(BaseModel):
     auth_header: AuthHeader | None = None
 
 
+class AgentUpdate(BaseModel):
+    """PATCH body (FR-02); every field optional.
+
+    `auth_header`: an object replaces the stored header, null removes it, omitted keeps it.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=1_000)
+    base_url: HttpUrl | None = None
+    auth_header: AuthHeader | None = None
+
+    @model_validator(mode="after")
+    def no_nulls_for_required_fields(self) -> Self:
+        for field in ("name", "description", "base_url"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
 class Agent(BaseModel):
     id: str
     name: str
@@ -112,6 +139,8 @@ class Agent(BaseModel):
     auth_header_name: str | None
     agent_card: dict[str, Any] | None
     """Snapshot of the Agent Card; null for agents registered before A2A."""
+    config_version: int = 1
+    """FR-02: goes up by one every time a saved change alters the agent's configuration."""
 
 
 class AgentList(BaseModel):
