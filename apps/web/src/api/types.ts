@@ -28,8 +28,6 @@ export interface Agent {
   auth_header_name: string | null
   /** Null for agents registered before A2A. */
   agent_card: AgentCard | null
-  /** Absent until the backend supports attachments (FR-05). */
-  attached_rules?: RuleAttachment[]
   config_version?: number
 }
 
@@ -46,14 +44,6 @@ export interface AgentList {
   total: number
 }
 
-export interface RuleAttachment {
-  rule_id: string
-  rule_type: 'guardrail' | 'policy'
-  order_index: number
-}
-
-export type AgentRuleRef = Pick<RuleAttachment, 'rule_id' | 'rule_type'>
-
 /** PATCH /agents/{id} body (proposed, docs/api-contract-agents.md). */
 export interface AgentUpdate {
   name?: string
@@ -61,8 +51,6 @@ export interface AgentUpdate {
   base_url?: string
   /** Object replaces, null removes, omitted keeps. */
   auth_header?: { name: string; value: string } | null
-  /** Full list; array order is the execution order. */
-  attached_rules?: AgentRuleRef[]
 }
 
 // --- guardrails and injection signatures (mirror apps/api/app/guardrails/models.py) ---
@@ -127,4 +115,42 @@ export interface DryRunResult {
 export interface InjectionSignature {
   id: string
   regex: string
+}
+
+// --- FR-05 bindings: mirror apps/api/app/bindings/models.py
+
+export type ScopeType = 'agent' | 'role' | 'user'
+
+export interface BindingCreate {
+  scope_type: ScopeType
+  scope_id: string
+  guardrail_id: string
+  order_index: number
+  enabled: boolean
+}
+
+export interface Binding extends BindingCreate {
+  id: string
+}
+
+export interface BindingUpdate {
+  order_index?: number
+  enabled?: boolean
+}
+
+export interface EffectiveGuardrail {
+  guardrail: Guardrail
+  source: 'mandatory' | ScopeType
+  binding_id: string | null
+  order_index: number
+}
+
+/** What the gateway enforces for an (agent, role, user) triple. */
+export interface EffectivePolicy {
+  agent_id: string | null
+  role: string | null
+  user_id: string | null
+  version: string
+  input: EffectiveGuardrail[]
+  output: EffectiveGuardrail[]
 }

@@ -1,14 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useUpdateAgent } from '../../api/agents'
+import { useEffect, useRef, useState } from 'react'
+import {
+  useAgentBindings,
+  useAttachGuardrail,
+  useDetachBinding,
+  useEffectiveGuardrails,
+  useReorderBindings,
+  useUpdateBinding,
+} from '../../api/bindings'
 import { ApiError } from '../../api/client'
 import { useGuardrails } from '../../api/guardrails'
-import type { Agent, Guardrail } from '../../api/types'
-import { badgeClass, buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
+import type { Agent, Binding, EffectiveGuardrail, Guardrail } from '../../api/types'
+import { badgeClass, buttonSecondary, inputClass } from '../../ui/classes'
 import { ACTION_LABELS, engineLabel, stageLabel } from '../guardrails/guardrailDisplay'
 
 const ATTACH_UNAVAILABLE = "Attaching guardrails isn't available on this API yet."
 const small = `${buttonSecondary} px-3 text-xs`
 const sub = 'm-0 text-xs font-semibold tracking-[0.04em] text-muted uppercase'
+const SOURCE_LABELS: Record<EffectiveGuardrail['source'], string> = {
+  mandatory: 'Mandatory',
+  agent: 'Agent',
+  role: 'Role',
+  user: 'User',
+}
 
 function Badges({ guardrail }: { guardrail: Guardrail }) {
   return (
@@ -20,36 +33,42 @@ function Badges({ guardrail }: { guardrail: Guardrail }) {
   )
 }
 
+function EffectiveList({ label, entries }: { label: string; entries: EffectiveGuardrail[] }) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <h4 className="m-0 text-sm font-semibold">{label}</h4>
+      <ol aria-label={label} className="m-0 flex list-decimal flex-col gap-1 pl-5 text-sm">
+        {entries.map((e) => (
+          <li key={e.guardrail.id}>
+            <span data-name>{e.guardrail.name}</span>{' '}
+            <span className="text-xs text-muted">{SOURCE_LABELS[e.source]}</span>
+          </li>
+        ))}
+      </ol>
+      {entries.length === 0 && <p className="m-0 text-sm text-muted">Nothing runs here.</p>}
+    </div>
+  )
+}
+
+/** FR-05/06: the agent's guardrail bindings (saved one action at a time) and what actually runs. */
 export function AgentGuardrails({ agent }: { agent: Agent }) {
   const guardrails = useGuardrails()
-  const update = useUpdateAgent(agent.id)
-  const supported = agent.attached_rules !== undefined
-  const rules = useMemo(
-    () => [...(agent.attached_rules ?? [])].sort((a, b) => a.order_index - b.order_index),
-    [agent.attached_rules],
-  )
-  const library = useMemo(() => guardrails.data ?? [], [guardrails.data])
-  // Mandatory guardrails always run; they are never listed (or saved) as attachments.
-  const mandatoryIds = useMemo(() => new Set(library.filter((g) => g.is_mandatory).map((g) => g.id)), [library])
-  const savedIds = useMemo(
-    () => rules.filter((r) => r.rule_type === 'guardrail' && !mandatoryIds.has(r.rule_id)).map((r) => r.rule_id),
-    [rules, mandatoryIds],
-  )
-  const [draft, setDraft] = useState<string[] | null>(null) // null = no local changes
+  const bindings = useAgentBindings(agent.id)
+  const effective = useEffectiveGuardrails(agent.id)
+  const attach = useAttachGuardrail(agent.id)
+  const updateBinding = useUpdateBinding(agent.id)
+  const reorder = useReorderBindings(agent.id)
+  const detach = useDetachBinding(agent.id)
+  const busy = attach.isPending || updateBinding.isPending || reorder.isPending || detach.isPending
+
   const [pick, setPick] = useState('')
-  const ids = draft ?? savedIds
-  const dirty = draft !== null && draft.join('\n') !== savedIds.join('\n')
-
-  const byId = new Map(library.map((g) => [g.id, g]))
-  const mandatory = library.filter((g) => g.is_mandatory)
-  const attachable = library.filter((g) => g.enabled && !g.is_mandatory && !ids.includes(g.id))
-
+  const [error, setError] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState('')
   const sectionRef = useRef<HTMLElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const selectRef = useRef<HTMLSelectElement>(null)
   // Where keyboard focus goes after the next render: 'heading', or a button's aria-label.
   const pendingFocus = useRef<string | null>(null)
-  const [announcement, setAnnouncement] = useState('')
 
   useEffect(() => {
     const target = pendingFocus.current
@@ -59,49 +78,61 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
       headingRef.current?.focus()
       return
     }
-    const buttons = sectionRef.current?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? []
-    for (const button of buttons) {
+    for (const button of sectionRef.current?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? []) {
       if (button.getAttribute('aria-label') === target) button.focus()
     }
   })
 
-  const edit = (next: string[]) => {
+  const library = guardrails.data ?? []
+  const byId = new Map(library.map((g) => [g.id, g]))
+  const mandatory = library.filter((g) => g.is_mandatory)
+  const unsupported =
+    bindings.error instanceof ApiError && (bindings.error.status === 404 || bindings.error.status === 405)
+  const all = bindings.data ?? []
+  // Mandatory guardrails need no binding; ignore any that exist.
+  const visible = all.filter((b) => !byId.get(b.guardrail_id)?.is_mandatory)
+  const attachable = library.filter((g) => g.enabled && !g.is_mandatory && !all.some((b) => b.guardrail_id === g.id))
+  const nameOf = (b: Binding) => byId.get(b.guardrail_id)?.name ?? `Unknown guardrail (${b.guardrail_id})`
+
+  const act = async (run: () => Promise<unknown>, done: { announce: string; focus?: string }) => {
+    setError(null)
     setAnnouncement('')
-    update.reset()
-    setDraft(next)
+    try {
+      await run()
+      if (done.focus) pendingFocus.current = done.focus
+      setAnnouncement(done.announce)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    }
   }
-  const nameOf = (id: string) => byId.get(id)?.name ?? `Unknown guardrail (${id})`
+
+  const attachPicked = () => {
+    const guardrail = byId.get(pick)
+    if (!guardrail) return
+    const orderIndex = all.length === 0 ? 0 : Math.max(...all.map((b) => b.order_index)) + 1
+    setPick('')
+    selectRef.current?.focus() // Attach is disabled again once the select resets
+    void act(() => attach.mutateAsync({ guardrailId: guardrail.id, orderIndex }), {
+      announce: `Attached ${guardrail.name}`,
+    })
+  }
+
   const move = (index: number, delta: number) => {
-    const next = [...ids]
+    const next = [...visible]
     ;[next[index], next[index + delta]] = [next[index + delta], next[index]]
     const target = index + delta
     // At either end the pressed arrow becomes disabled, so focus the other one.
     const direction = target === 0 ? 'down' : target === next.length - 1 ? 'up' : delta < 0 ? 'up' : 'down'
-    pendingFocus.current = `Move ${nameOf(ids[index])} ${direction}`
-    edit(next)
+    const name = nameOf(visible[index])
+    void act(() => reorder.mutateAsync(next), { announce: `Moved ${name}`, focus: `Move ${name} ${direction}` })
   }
-  const save = () =>
-    update.mutate(
-      {
-        attached_rules: [
-          ...ids.map((rule_id) => ({ rule_id, rule_type: 'guardrail' as const })),
-          ...rules.filter((r) => r.rule_type === 'policy').map(({ rule_id, rule_type }) => ({ rule_id, rule_type })),
-        ],
-      },
-      {
-        onSuccess: () => {
-          setDraft(null)
-          setAnnouncement('Guardrails saved')
-          pendingFocus.current = 'heading'
-        },
-      },
-    )
-
-  const saveError =
-    update.error instanceof ApiError && update.error.status === 405 ? ATTACH_UNAVAILABLE : update.error?.message
 
   return (
-    <section ref={sectionRef} aria-labelledby="agent-guardrails-title" className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 sm:p-6">
+    <section
+      ref={sectionRef}
+      aria-labelledby="agent-guardrails-title"
+      className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 sm:p-6"
+    >
       <h2 id="agent-guardrails-title" className="m-0 text-lg font-semibold">
         Guardrails
       </h2>
@@ -137,44 +168,83 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
             </div>
           )}
 
-          {!supported ? (
+          {unsupported ? (
             <p className="m-0 text-sm text-muted">{ATTACH_UNAVAILABLE}</p>
+          ) : bindings.isError ? (
+            <p role="alert" className="m-0 text-sm">
+              Couldn't load this agent's guardrails.
+            </p>
+          ) : bindings.isPending ? (
+            <p className="m-0 text-sm text-muted">Loading attached guardrails…</p>
           ) : (
             <div className="flex flex-col gap-3">
               <h3 id="attached-guardrails" ref={headingRef} tabIndex={-1} className={sub}>
-                Attached guardrails
+                Attached to this agent
               </h3>
-              {ids.length === 0 ? (
+              {visible.length === 0 ? (
                 <p className="m-0 text-sm text-muted">No guardrails attached. Only the mandatory ones run.</p>
               ) : (
                 <ol aria-labelledby="attached-guardrails" className="m-0 flex list-none flex-col gap-2 p-0">
-                  {ids.map((id, index) => {
-                    const g = byId.get(id)
-                    const name = g?.name ?? `Unknown guardrail (${id})`
+                  {visible.map((b, index) => {
+                    const g = byId.get(b.guardrail_id)
+                    const name = nameOf(b)
                     return (
-                      <li key={id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2">
+                      <li
+                        key={b.id}
+                        className={`flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2 ${
+                          b.enabled ? '' : 'opacity-60'
+                        }`}
+                      >
                         <span className="w-6 text-sm text-muted">{index + 1}.</span>
                         <span data-name className="text-sm font-semibold">
                           {name}
                         </span>
                         {g && <Badges guardrail={g} />}
-                        <span className="ml-auto flex gap-2">
-                          <button type="button" className={small} disabled={index === 0} aria-label={`Move ${name} up`} onClick={() => move(index, -1)}>
+                        {!b.enabled && (
+                          <span className={`${badgeClass} bg-warn-bg text-warn-fg`}>Paused</span>
+                        )}
+                        <span className="ml-auto flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className={small}
+                            disabled={busy || index === 0}
+                            aria-label={`Move ${name} up`}
+                            onClick={() => move(index, -1)}
+                          >
                             ↑
                           </button>
                           <button
                             type="button"
                             className={small}
-                            disabled={index === ids.length - 1}
+                            disabled={busy || index === visible.length - 1}
                             aria-label={`Move ${name} down`}
                             onClick={() => move(index, 1)}
                           >
                             ↓
                           </button>
-                          <button type="button" className={small} aria-label={`Remove ${name}`} onClick={() => {
-                              pendingFocus.current = 'heading'
-                              edit(ids.filter((x) => x !== id))
-                            }}>
+                          <button
+                            type="button"
+                            className={small}
+                            disabled={busy}
+                            aria-label={`${b.enabled ? 'Pause' : 'Resume'} ${name}`}
+                            onClick={() =>
+                              void act(() => updateBinding.mutateAsync({ id: b.id, changes: { enabled: !b.enabled } }), {
+                                announce: `${b.enabled ? 'Paused' : 'Resumed'} ${name}`,
+                                focus: `${b.enabled ? 'Resume' : 'Pause'} ${name}`,
+                              })
+                            }
+                          >
+                            {b.enabled ? 'Pause' : 'Resume'}
+                          </button>
+                          <button
+                            type="button"
+                            className={small}
+                            disabled={busy}
+                            aria-label={`Remove ${name}`}
+                            onClick={() =>
+                              void act(() => detach.mutateAsync(b.id), { announce: `Removed ${name}`, focus: 'heading' })
+                            }
+                          >
                             Remove
                           </button>
                         </span>
@@ -189,7 +259,13 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
                   <label htmlFor="attach-guardrail" className="text-[13px] font-semibold text-[#30343B]">
                     Attach guardrail
                   </label>
-                  <select id="attach-guardrail" ref={selectRef} value={pick} onChange={(e) => setPick(e.target.value)} className={inputClass}>
+                  <select
+                    id="attach-guardrail"
+                    ref={selectRef}
+                    value={pick}
+                    onChange={(e) => setPick(e.target.value)}
+                    className={inputClass}
+                  >
                     <option value="">Choose a guardrail…</option>
                     {attachable.map((g) => (
                       <option key={g.id} value={g.id}>
@@ -198,46 +274,26 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
                     ))}
                   </select>
                 </div>
-                <button
-                  type="button"
-                  className={buttonSecondary}
-                  disabled={!pick}
-                  onClick={() => {
-                    edit([...ids, pick])
-                    setPick('')
-                    selectRef.current?.focus() // Attach is disabled again once the select resets
-                  }}
-                >
+                <button type="button" className={buttonSecondary} disabled={!pick || busy} onClick={attachPicked}>
                   Attach
                 </button>
               </div>
 
-              {(dirty || saveError) && (
-                <div className="flex flex-wrap items-center gap-3">
-                  {dirty && <span className="text-sm text-warn-fg">Unsaved changes</span>}
-                  {saveError && (
-                    <span role="alert" className="text-sm text-danger">
-                      {saveError}
-                    </span>
-                  )}
-                  <span className="ml-auto flex gap-2">
-                    <button
-                      type="button"
-                      className={buttonSecondary}
-                      onClick={() => {
-                        setDraft(null)
-                        update.reset()
-                        pendingFocus.current = 'heading'
-                      }}
-                    >
-                      Discard
-                    </button>
-                    <button type="button" className={buttonPrimary} disabled={!dirty || update.isPending} onClick={save}>
-                      Save guardrails
-                    </button>
-                  </span>
-                </div>
+              {error && (
+                <p role="alert" className="m-0 text-sm text-danger">
+                  {error}
+                </p>
               )}
+            </div>
+          )}
+
+          {effective.data && (
+            <div className="flex flex-col gap-3 border-t border-line pt-4">
+              <h3 className={sub}>Runs in this order</h3>
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <EffectiveList label="Input checks" entries={effective.data.input} />
+                <EffectiveList label="Output checks" entries={effective.data.output} />
+              </div>
             </div>
           )}
         </>

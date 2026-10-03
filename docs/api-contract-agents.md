@@ -1,46 +1,43 @@
-# Agents API — proposed additions (FR-02, FR-05, FR-06)
+# Agents API — what the web app expects
 
-> **Update (A2A):** agents speak A2A 1.0 ([agent-contract-a2a.md](agent-contract-a2a.md)). Registration reads the agent's Agent Card from `<base_url>/.well-known/agent-card.json`; `request_format` / `response_format` are gone, `upstream_url` is the card's JSON-RPC endpoint, and `agent_card` holds the card snapshot. The shapes below are updated.
+> **A2A:** agents speak A2A 1.0 ([agent-contract-a2a.md](agent-contract-a2a.md)). Registration reads the agent's Agent Card from `<base_url>/.well-known/agent-card.json`; `upstream_url` is the card's JSON-RPC endpoint and `agent_card` holds the card snapshot.
 
-Proposed by the frontend for the agent page (D-03). All under `/api/v1`, Bearer token required,
-errors as FastAPI `{"detail": ...}`. Matches `RuleAttachment` from the
-`fr-05-attached-dettached-policies-guardrails` branch.
+All under `/api/v1`, Bearer token required, errors as FastAPI `{"detail": ...}`.
+
+## FR-05 / FR-06: attaching guardrails — implemented (#90)
+
+The agent page uses the bindings API as built in `apps/api/app/api/routes/bindings.py`:
+
+| Call | Used for |
+|---|---|
+| `GET /bindings?scope_type=agent&scope_id={agentId}` | the agent's attached guardrails, ordered by `order_index` |
+| `POST /bindings` `{scope_type: "agent", scope_id, guardrail_id, order_index, enabled: true}` | attach (appended after the highest `order_index`) |
+| `PATCH /bindings/{id}` `{order_index}` / `{enabled}` | reorder (each binding gets its position; unchanged ones aren't sent) / pause and resume |
+| `DELETE /bindings/{id}` | detach |
+| `GET /effective-guardrails?agent_id={agentId}` | "Runs in this order": input and output lists with each guardrail's source |
+
+Guardrails with `is_mandatory: true` are shown as "Always applied" and never offered for attaching.
+Role and user scopes exist in the API; the agent page only manages the agent scope.
+
+## FR-02: edit and delete an agent — proposed, not implemented yet
 
 ```ts
-interface RuleAttachment { rule_id: string; rule_type: 'guardrail' | 'policy'; order_index: number }
-
-interface Agent {
-  id: string
-  name: string
-  description: string
-  base_url: string                   // where the Agent Card lives
-  upstream_url: string               // A2A JSON-RPC endpoint from the card (read-only)
-  auth_header_name: string | null
-  agent_card: AgentCard | null       // A2A card snapshot; null for agents registered before A2A
-  attached_rules?: RuleAttachment[]  // NEW; ordered by order_index
-  config_version?: number            // NEW; the agents table already has the column
-}
-
 interface AgentUpdate {              // PATCH body; every field optional
   name?: string
   description?: string
   base_url?: string                  // re-fetches and re-validates the Agent Card
   auth_header?: { name: string; value: string } | null  // object = replace, null = remove, omitted = keep
-  attached_rules?: { rule_id: string; rule_type: 'guardrail' | 'policy' }[]  // full list; array order = order_index
 }
-
-// Guardrail gains:
-interface Guardrail { /* … */ is_mandatory?: boolean }  // applies to every agent; never stored in attached_rules (field name from the merged fr-06 work)
 ```
 
 | Call | Success | Errors |
 |---|---|---|
-| `GET /agents/{id}` | 200 `Agent` (incl. `attached_rules`, `config_version`) | 404 "Agent not found"; 422 malformed id |
+| `GET /agents/{id}` | 200 `Agent` (may include `config_version`) | 404 "Agent not found"; 422 malformed id |
 | `PATCH /agents/{id}` | 200 `Agent`, `config_version` + 1 | 404; 409 "An agent with this name already exists"; 422 validation; 502 when a changed `base_url` has no readable A2A 1.0 Agent Card (the detail says why) |
-| `DELETE /agents/{id}` | 204 | 404 |
+| `DELETE /agents/{id}` (also removes the agent's bindings) | 204 | 404 |
 
-Until these exist the web app shows "… isn't available on this API yet" (it treats 405 and a missing
-`attached_rules` as "not implemented").
+Until these exist the web app shows "Editing agents / Deleting agents isn't available on this API yet."
+(it treats 405 as "not implemented").
 
 ## B-06: test chat — proposed
 

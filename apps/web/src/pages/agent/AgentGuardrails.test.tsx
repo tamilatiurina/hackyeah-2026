@@ -1,23 +1,31 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
+import { apiPath } from '../../api/client'
 import { fakeApi } from '../../test/fakeApi'
 import { renderApp } from '../../test/renderApp'
+import { server } from '../../test/server'
 
 const section = () => screen.getByRole('region', { name: 'Guardrails' })
-const attachedNames = () =>
-  within(within(section()).getByRole('list', { name: 'Attached guardrails' }))
+const listNames = (name: string) =>
+  within(within(section()).getByRole('list', { name }))
     .getAllByRole('listitem')
     .map((li) => li.querySelector('[data-name]')?.textContent)
+const attachedNames = () => listNames('Attached to this agent')
+const heading = () => within(section()).getByRole('heading', { name: 'Attached to this agent' })
+const attachedList = () => within(within(section()).getByRole('list', { name: 'Attached to this agent' }))
 
 async function open(id = 'agent-support') {
   const user = userEvent.setup()
   renderApp(`/agents/${id}`)
-  await within(await screen.findByRole('region', { name: 'Guardrails' })).findByText('PII redaction')
+  await within(await screen.findByRole('region', { name: 'Guardrails' })).findByRole('heading', {
+    name: 'Attached to this agent',
+  })
   return user
 }
 
-describe('Agent guardrails', () => {
+describe('Agent guardrails (bindings)', () => {
   it('shows mandatory guardrails as always applied, without controls', async () => {
     await open()
     const always = within(section()).getByRole('list', { name: 'Always applied' })
@@ -25,15 +33,15 @@ describe('Agent guardrails', () => {
     expect(within(always).queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('lists attached guardrails in order with their badges', async () => {
+  it('lists the agent’s bindings in order with their badges', async () => {
     await open()
     expect(attachedNames()).toEqual(['PII redaction'])
-    const row = within(section()).getByText('PII redaction').closest('li') as HTMLElement
+    const row = attachedList().getByText('PII redaction').closest('li') as HTMLElement
     expect(within(row).getByText('Open-source library')).toBeInTheDocument()
     expect(within(row).getByText('Redact')).toBeInTheDocument()
   })
 
-  it('never offers mandatory or attached guardrails for attaching', async () => {
+  it('offers only enabled, non-mandatory, unbound guardrails', async () => {
     await open()
     const options = within(within(section()).getByLabelText('Attach guardrail'))
       .getAllByRole('option')
@@ -41,117 +49,92 @@ describe('Agent guardrails', () => {
     expect(options).toEqual(['Choose a guardrail…', 'Toxicity filter'])
   })
 
-  it('attaches, reorders and saves in order', async () => {
+  it('attaches at the end and keeps focus on the picker', async () => {
     const user = await open()
     await user.selectOptions(within(section()).getByLabelText('Attach guardrail'), 'Toxicity filter')
     await user.click(within(section()).getByRole('button', { name: 'Attach' }))
-    expect(attachedNames()).toEqual(['PII redaction', 'Toxicity filter'])
-    expect(within(section()).getByText('Unsaved changes')).toBeInTheDocument()
-    await user.click(within(section()).getByRole('button', { name: 'Move Toxicity filter up' }))
-    expect(attachedNames()).toEqual(['Toxicity filter', 'PII redaction'])
-    await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
-    await within(section()).findByRole('button', { name: 'Move Toxicity filter down' })
-    expect(within(section()).queryByText('Unsaved changes')).not.toBeInTheDocument()
-    expect(fakeApi.lastAgentUpdate).toEqual({
-      attached_rules: [
-        { rule_id: 'gr-toxicity', rule_type: 'guardrail' },
-        { rule_id: 'gr-pii', rule_type: 'guardrail' },
-      ],
+    await waitFor(() => expect(attachedNames()).toEqual(['PII redaction', 'Toxicity filter']))
+    expect(fakeApi.bindingRequests.at(-1)).toEqual({
+      method: 'POST',
+      body: { scope_type: 'agent', scope_id: 'agent-support', guardrail_id: 'gr-toxicity', order_index: 1, enabled: true },
     })
+    expect(within(section()).getByLabelText('Attach guardrail')).toHaveFocus()
+    expect(within(section()).getByRole('status')).toHaveTextContent('Attached Toxicity filter')
   })
 
-  it('keeps policy rules when saving', async () => {
-    fakeApi.agents[0] = {
-      ...fakeApi.agents[0],
-      attached_rules: [
-        { rule_id: 'pol-1', rule_type: 'policy', order_index: 0 },
-        { rule_id: 'gr-pii', rule_type: 'guardrail', order_index: 1 },
-      ],
-    }
+  it('reorders by renumbering, even when order_index values are equal', async () => {
+    fakeApi.bindings = [
+      { id: 'rb-a', scope_type: 'agent', scope_id: 'agent-support', guardrail_id: 'gr-pii', order_index: 0, enabled: true },
+      { id: 'rb-b', scope_type: 'agent', scope_id: 'agent-support', guardrail_id: 'gr-toxicity', order_index: 0, enabled: true },
+    ]
+    const user = await open()
+    expect(attachedNames()).toEqual(['PII redaction', 'Toxicity filter'])
+    await user.click(within(section()).getByRole('button', { name: 'Move Toxicity filter up' }))
+    await waitFor(() => expect(attachedNames()).toEqual(['Toxicity filter', 'PII redaction']))
+    // rb-b already sits at 0; only rb-a moves (to 1). Equal values would not have reordered anything.
+    expect(fakeApi.bindingRequests).toEqual([{ method: 'PATCH', id: 'rb-a', body: { order_index: 1 } }])
+    await waitFor(() =>
+      expect(within(section()).getByRole('button', { name: 'Move Toxicity filter down' })).toHaveFocus(),
+    )
+  })
+
+  it('pauses and resumes a binding', async () => {
+    const user = await open()
+    await user.click(within(section()).getByRole('button', { name: 'Pause PII redaction' }))
+    const row = (await within(section()).findByText('Paused')).closest('li') as HTMLElement
+    expect(within(row).getByRole('button', { name: 'Resume PII redaction' })).toBeInTheDocument()
+    expect(fakeApi.bindingRequests.at(-1)).toEqual({ method: 'PATCH', id: 'rb-1', body: { enabled: false } })
+    await waitFor(() =>
+      expect(within(within(section()).getByRole('list', { name: 'Output checks' })).queryByText('PII redaction')).toBeNull(),
+    )
+  })
+
+  it('removes a binding and returns focus to the heading', async () => {
     const user = await open()
     await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
-    await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
-    await within(section()).findByText('No guardrails attached. Only the mandatory ones run.')
-    expect(fakeApi.lastAgentUpdate).toEqual({ attached_rules: [{ rule_id: 'pol-1', rule_type: 'policy' }] })
+    expect(
+      await within(section()).findByText('No guardrails attached. Only the mandatory ones run.'),
+    ).toBeInTheDocument()
+    expect(fakeApi.bindingRequests.at(-1)).toEqual({ method: 'DELETE', id: 'rb-1' })
+    await waitFor(() => expect(heading()).toHaveFocus())
   })
 
-  it('discards local changes', async () => {
+  it('shows the API’s message when attaching fails', async () => {
+    server.use(
+      http.post(apiPath('/bindings'), () =>
+        HttpResponse.json({ detail: 'This guardrail is already attached to that scope' }, { status: 409 }),
+      ),
+    )
     const user = await open()
-    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
-    expect(within(section()).getByText('No guardrails attached. Only the mandatory ones run.')).toBeInTheDocument()
-    await user.click(within(section()).getByRole('button', { name: 'Discard' }))
-    expect(attachedNames()).toEqual(['PII redaction'])
-    expect(fakeApi.lastAgentUpdate).toBeNull()
-  })
-
-  it('disables moving past the ends', async () => {
-    await open()
-    expect(within(section()).getByRole('button', { name: 'Move PII redaction up' })).toBeDisabled()
-    expect(within(section()).getByRole('button', { name: 'Move PII redaction down' })).toBeDisabled()
+    await user.selectOptions(within(section()).getByLabelText('Attach guardrail'), 'Toxicity filter')
+    await user.click(within(section()).getByRole('button', { name: 'Attach' }))
+    expect(await within(section()).findByText('This guardrail is already attached to that scope')).toBeInTheDocument()
   })
 
   it('shows unknown guardrail ids so they can be removed', async () => {
-    fakeApi.agents[0] = {
-      ...fakeApi.agents[0],
-      attached_rules: [{ rule_id: 'gr-gone', rule_type: 'guardrail', order_index: 0 }],
-    }
+    fakeApi.bindings = [
+      { id: 'rb-x', scope_type: 'agent', scope_id: 'agent-support', guardrail_id: 'gr-gone', order_index: 0, enabled: true },
+    ]
     renderApp('/agents/agent-support')
     expect(await screen.findByText('Unknown guardrail (gr-gone)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Unknown guardrail (gr-gone)' })).toBeInTheDocument()
   })
 
-  it('says attaching is not available when the API has no attached_rules', async () => {
-    fakeApi.agentsSupport.attachments = false
+  it('shows what runs on input and output, with each source', async () => {
+    await open()
+    await waitFor(() => expect(listNames('Input checks')).toEqual(['Prompt injection detector']))
+    expect(listNames('Output checks')).toEqual(['PII redaction'])
+    const input = within(within(section()).getByRole('list', { name: 'Input checks' }))
+    expect(input.getByText('Mandatory')).toBeInTheDocument()
+    const output = within(within(section()).getByRole('list', { name: 'Output checks' }))
+    expect(output.getByText('Agent')).toBeInTheDocument()
+  })
+
+  it('falls back when the API has no bindings endpoint', async () => {
+    fakeApi.bindingsSupported = false
     renderApp('/agents/agent-support')
     expect(await screen.findByText("Attaching guardrails isn't available on this API yet.")).toBeInTheDocument()
     expect(screen.queryByLabelText('Attach guardrail')).not.toBeInTheDocument()
     expect(within(section()).getByRole('list', { name: 'Always applied' })).toBeInTheDocument()
-  })
-
-  it('says attaching is not available when saving returns 405', async () => {
-    fakeApi.agentsSupport.update = false
-    const user = await open()
-    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
-    await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
-    expect(await within(section()).findByText("Attaching guardrails isn't available on this API yet.")).toBeInTheDocument()
-  })
-
-  it('never lists or re-sends a mandatory guardrail found in attached_rules', async () => {
-    fakeApi.agents[0] = {
-      ...fakeApi.agents[0],
-      attached_rules: [
-        { rule_id: 'gr-injection', rule_type: 'guardrail', order_index: 0 },
-        { rule_id: 'gr-pii', rule_type: 'guardrail', order_index: 1 },
-      ],
-    }
-    const user = await open()
-    expect(attachedNames()).toEqual(['PII redaction'])
-    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
-    await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
-    await within(section()).findByText('No guardrails attached. Only the mandatory ones run.')
-    expect(fakeApi.lastAgentUpdate).toEqual({ attached_rules: [] })
-  })
-
-  it('keeps keyboard focus in the section after each action', async () => {
-    const user = await open()
-    const heading = () => within(section()).getByRole('heading', { name: 'Attached guardrails' })
-    await user.selectOptions(within(section()).getByLabelText('Attach guardrail'), 'Toxicity filter')
-    await user.click(within(section()).getByRole('button', { name: 'Attach' }))
-    expect(within(section()).getByLabelText('Attach guardrail')).toHaveFocus()
-    await user.click(within(section()).getByRole('button', { name: 'Move Toxicity filter up' }))
-    await waitFor(() => expect(within(section()).getByRole('button', { name: 'Move Toxicity filter down' })).toHaveFocus())
-    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
-    await waitFor(() => expect(heading()).toHaveFocus())
-    await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
-    expect(await within(section()).findByText('Guardrails saved')).toBeInTheDocument()
-    await waitFor(() => expect(heading()).toHaveFocus())
-  })
-
-  it('returns focus to the list heading after Discard', async () => {
-    const user = await open()
-    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
-    await user.click(within(section()).getByRole('button', { name: 'Discard' }))
-    await waitFor(() =>
-      expect(within(section()).getByRole('heading', { name: 'Attached guardrails' })).toHaveFocus(),
-    )
   })
 })

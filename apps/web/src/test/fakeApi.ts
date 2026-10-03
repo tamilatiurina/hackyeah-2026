@@ -7,6 +7,10 @@ import type {
   Agent,
   AgentCard,
   AgentRegistration,
+  Binding,
+  BindingCreate,
+  BindingUpdate,
+  EffectiveGuardrail,
   AgentUpdate,
   DryRunRequest,
   DryRunResult,
@@ -93,7 +97,6 @@ function seedAgents(): Agent[] {
       auth_header_name: 'Authorization',
       agent_card: fakeAgentCard('Support Assistant', 'https://support-agent.acme.example'),
       config_version: 1,
-      attached_rules: [{ rule_id: 'gr-pii', rule_type: 'guardrail', order_index: 0 }],
     },
     {
       id: 'agent-contracts',
@@ -105,7 +108,6 @@ function seedAgents(): Agent[] {
       auth_header_name: null,
       agent_card: null,
       config_version: 1,
-      attached_rules: [],
     },
   ]
 }
@@ -113,14 +115,29 @@ function seedAgents(): Agent[] {
 const signedIn = (request: Request) => request.headers.get('Authorization') === `Bearer ${TEST_TOKEN}`
 const notAuthenticated = () => detail(401, 'Not authenticated')
 
-// Shape the response like a backend that may not support attachments yet.
-function present(agent: Agent): Agent {
-  if (fakeApi.agentsSupport.attachments) return agent
-  const { attached_rules: _omit, ...rest } = agent
-  return rest
+const methodNotAllowed = () => detail(405, 'Method Not Allowed')
+
+function seedBindings(): Binding[] {
+  return [
+    { id: 'rb-1', scope_type: 'agent', scope_id: 'agent-support', guardrail_id: 'gr-pii', order_index: 0, enabled: true },
+  ]
 }
 
-const methodNotAllowed = () => detail(405, 'Method Not Allowed')
+// Same rules as apps/api/app/bindings/resolve.py: mandatory first, then enabled agent bindings by
+// order_index (ties by library position); disabled or mandatory guardrails are skipped.
+function effectiveFor(agentId: string): EffectiveGuardrail[] {
+  const mandatory: EffectiveGuardrail[] = fakeApi.guardrails
+    .filter((g) => g.enabled && g.is_mandatory)
+    .map((g) => ({ guardrail: g, source: 'mandatory', binding_id: null, order_index: 0 }))
+  const position = (id: string) => fakeApi.guardrails.findIndex((g) => g.id === id)
+  const bound: EffectiveGuardrail[] = fakeApi.bindings
+    .filter((b) => b.scope_type === 'agent' && b.scope_id === agentId && b.enabled)
+    .map((b) => ({ b, g: fakeApi.guardrails.find((g) => g.id === b.guardrail_id) }))
+    .filter((x): x is { b: Binding; g: Guardrail } => Boolean(x.g && x.g.enabled && !x.g.is_mandatory))
+    .sort((x, y) => x.b.order_index - y.b.order_index || position(x.g.id) - position(y.g.id))
+    .map(({ b, g }) => ({ guardrail: g, source: 'agent', binding_id: b.id, order_index: b.order_index }))
+  return [...mandatory, ...bound]
+}
 
 const trace = (
   name: string,
@@ -219,7 +236,11 @@ export const fakeApi: {
   agents: Agent[]
   lastAgentRegistration: AgentRegistration | null
   agentId: number
-  agentsSupport: { update: boolean; delete: boolean; attachments: boolean }
+  agentsSupport: { update: boolean; delete: boolean }
+  bindings: Binding[]
+  bindingsSupported: boolean
+  bindingRequests: { method: string; id?: string; body?: unknown }[]
+  bindingId: number
   lastAgentUpdate: AgentUpdate | null
   testChatSupported: boolean
   flagsSupported: boolean
@@ -232,12 +253,16 @@ export const fakeApi: {
   agents: seedAgents(),
   lastAgentRegistration: null,
   agentId: 1,
-  agentsSupport: { update: true, delete: true, attachments: true },
+  agentsSupport: { update: true, delete: true },
   lastAgentUpdate: null,
   testChatSupported: true,
   flagsSupported: true,
   testChatRequests: [],
   flags: [],
+  bindings: seedBindings(),
+  bindingsSupported: true,
+  bindingRequests: [],
+  bindingId: 1,
 }
 
 export function resetFakeApi(): void {
@@ -247,7 +272,11 @@ export function resetFakeApi(): void {
   fakeApi.agents = seedAgents()
   fakeApi.lastAgentRegistration = null
   fakeApi.agentId = 1
-  fakeApi.agentsSupport = { update: true, delete: true, attachments: true }
+  fakeApi.agentsSupport = { update: true, delete: true }
+  fakeApi.bindings = seedBindings()
+  fakeApi.bindingsSupported = true
+  fakeApi.bindingRequests = []
+  fakeApi.bindingId = 1
   fakeApi.lastAgentUpdate = null
   fakeApi.testChatSupported = true
   fakeApi.flagsSupported = true
@@ -356,7 +385,7 @@ export const fakeApiHandlers = [
 
   http.get(apiPath('/agents'), ({ request }) => {
     if (!signedIn(request)) return notAuthenticated()
-    return HttpResponse.json({ data: fakeApi.agents.map(present), total: fakeApi.agents.length })
+    return HttpResponse.json({ data: fakeApi.agents, total: fakeApi.agents.length })
   }),
 
   http.post(apiPath('/agents'), async ({ request }) => {
@@ -385,7 +414,6 @@ export const fakeApiHandlers = [
       auth_header_name: body.auth_header?.name ?? null,
       agent_card: card,
       config_version: 1,
-      attached_rules: [],
     }
     fakeApi.agents.unshift(agent)
     return HttpResponse.json(agent, { status: 201 })
@@ -394,7 +422,7 @@ export const fakeApiHandlers = [
   http.get(apiPath('/agents/:id'), ({ request, params }) => {
     if (!signedIn(request)) return notAuthenticated()
     const agent = fakeApi.agents.find((a) => a.id === params.id)
-    return agent ? HttpResponse.json(present(agent)) : detail(404, 'Agent not found')
+    return agent ? HttpResponse.json(agent) : detail(404, 'Agent not found')
   }),
 
   http.patch(apiPath('/agents/:id'), async ({ request, params }) => {
@@ -411,18 +439,15 @@ export const fakeApiHandlers = [
     if (body.base_url !== undefined && new URL(body.base_url).hostname.includes('unreachable')) {
       return detail(502, cardUnreachable(body.base_url))
     }
-    const { auth_header, attached_rules, ...fields } = body
+    const { auth_header, ...fields } = body
     const updated: Agent = {
       ...current,
       ...fields,
       auth_header_name: auth_header === undefined ? current.auth_header_name : (auth_header?.name ?? null),
-      attached_rules: attached_rules
-        ? attached_rules.map((r, order_index) => ({ ...r, order_index }))
-        : current.attached_rules,
       config_version: (current.config_version ?? 1) + 1,
     }
     fakeApi.agents[index] = updated
-    return HttpResponse.json(present(updated))
+    return HttpResponse.json(updated)
   }),
 
   http.delete(apiPath('/agents/:id'), ({ request, params }) => {
@@ -446,5 +471,63 @@ export const fakeApiHandlers = [
     if (!fakeApi.flagsSupported) return detail(405, 'Method Not Allowed')
     fakeApi.flags.push(await request.json())
     return HttpResponse.json({ ok: true }, { status: 201 })
+  }),
+
+  http.get(apiPath('/bindings'), ({ request }) => {
+    if (!fakeApi.bindingsSupported) return detail(404, 'Not Found')
+    const url = new URL(request.url)
+    const scopeType = url.searchParams.get('scope_type')
+    const scopeId = url.searchParams.get('scope_id')
+    const list = fakeApi.bindings
+      .filter((b) => (!scopeType || b.scope_type === scopeType) && (!scopeId || b.scope_id === scopeId))
+      .sort((a, b) => a.order_index - b.order_index)
+    return HttpResponse.json(list)
+  }),
+
+  http.post(apiPath('/bindings'), async ({ request }) => {
+    if (!fakeApi.bindingsSupported) return detail(404, 'Not Found')
+    const body = (await request.json()) as BindingCreate
+    fakeApi.bindingRequests.push({ method: 'POST', body })
+    const guardrail = fakeApi.guardrails.find((g) => g.id === body.guardrail_id)
+    if (!guardrail) return detail(404, 'Guardrail not found')
+    if (guardrail.is_mandatory) {
+      return detail(409, 'Mandatory guardrails already apply everywhere and cannot be attached')
+    }
+    if (fakeApi.bindings.some((b) => b.scope_type === body.scope_type && b.scope_id === body.scope_id && b.guardrail_id === body.guardrail_id)) {
+      return detail(409, 'This guardrail is already attached to that scope')
+    }
+    const binding: Binding = { ...body, id: `rb-new-${fakeApi.bindingId++}` }
+    fakeApi.bindings.push(binding)
+    return HttpResponse.json(binding, { status: 201 })
+  }),
+
+  http.patch(apiPath('/bindings/:id'), async ({ request, params }) => {
+    const body = (await request.json()) as BindingUpdate
+    fakeApi.bindingRequests.push({ method: 'PATCH', id: String(params.id), body })
+    const index = fakeApi.bindings.findIndex((b) => b.id === params.id)
+    if (index === -1) return detail(404, 'Binding not found')
+    fakeApi.bindings[index] = { ...fakeApi.bindings[index], ...body }
+    return HttpResponse.json(fakeApi.bindings[index])
+  }),
+
+  http.delete(apiPath('/bindings/:id'), ({ params }) => {
+    fakeApi.bindingRequests.push({ method: 'DELETE', id: String(params.id) })
+    if (!fakeApi.bindings.some((b) => b.id === params.id)) return detail(404, 'Binding not found')
+    fakeApi.bindings = fakeApi.bindings.filter((b) => b.id !== params.id)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(apiPath('/effective-guardrails'), ({ request }) => {
+    if (!fakeApi.bindingsSupported) return detail(404, 'Not Found')
+    const agentId = new URL(request.url).searchParams.get('agent_id')
+    const entries = agentId ? effectiveFor(agentId) : effectiveFor('')
+    return HttpResponse.json({
+      agent_id: agentId,
+      role: null,
+      user_id: null,
+      version: 'test',
+      input: entries.filter((e) => e.guardrail.stages.includes('input')),
+      output: entries.filter((e) => e.guardrail.stages.includes('output')),
+    })
   }),
 ]
