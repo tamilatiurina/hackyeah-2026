@@ -99,7 +99,7 @@ describe('sign-in', () => {
     vi.stubEnv('DEV', false)
     try {
       renderUnconfigured()
-      expect(screen.getByText(/built without VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY/)).toBeInTheDocument()
+      expect(screen.getByText(/built without SUPABASE_URL and SUPABASE_KEY/)).toBeInTheDocument()
       expect(screen.queryByText(/\.env\.local/)).not.toBeInTheDocument()
     } finally {
       vi.unstubAllEnvs()

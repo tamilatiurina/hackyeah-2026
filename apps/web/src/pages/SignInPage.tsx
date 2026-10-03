@@ -49,8 +49,8 @@ export function SignInPage() {
         {!configured ? (
           <p className="m-0 text-sm text-muted">
             {import.meta.env.DEV
-              ? "Supabase isn't configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in apps/web/.env.local (make supabase writes them)."
-              : "Supabase isn't configured: this deployment was built without VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. Set them in the hosting project's environment variables and redeploy."}
+              ? "Supabase isn't configured. Set SUPABASE_URL and SUPABASE_KEY in apps/web/.env.local (make supabase writes them)."
+              : "Supabase isn't configured: this deployment was built without SUPABASE_URL and SUPABASE_KEY. Set them in the hosting project's environment variables and redeploy."}
           </p>
         ) : (
           <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">

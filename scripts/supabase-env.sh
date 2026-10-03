@@ -22,8 +22,8 @@ ENV
 cat > apps/web/.env.local <<ENV
 # Local Supabase (make supabase). Development keys only.
 API_URL=http://localhost:8000
-VITE_SUPABASE_URL=$API_URL
-VITE_SUPABASE_ANON_KEY=$PUBLISHABLE_KEY
+SUPABASE_URL=$API_URL
+SUPABASE_KEY=$PUBLISHABLE_KEY
 ENV
 
 demo=apps/api/supabase/.env.demo
