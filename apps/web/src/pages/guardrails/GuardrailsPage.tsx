@@ -3,6 +3,7 @@ import { useGuardrailTemplates, useGuardrails } from '../../api/guardrails'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { GuardrailCard } from './GuardrailCard'
 import { NewGuardrailForm } from './NewGuardrailForm'
+import { SignaturesSection } from './SignaturesSection'
 
 export function GuardrailsPage() {
   const templates = useGuardrailTemplates()
@@ -95,6 +96,7 @@ export function GuardrailsPage() {
         />
       )}
       {content}
+      <SignaturesSection />
     </section>
   )
 }
