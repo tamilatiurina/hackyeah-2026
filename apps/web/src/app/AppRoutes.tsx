@@ -1,8 +1,15 @@
+import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
+import { AgentsPage } from '../pages/agents/AgentsPage'
 import { Placeholder } from '../pages/Placeholder'
 import { Layout } from './Layout'
 import { homeFor, navItemsFor } from './nav'
 import { useRole } from './role'
+
+// Screens that exist; every other nav item renders its placeholder.
+const PAGES: Partial<Record<string, ReactElement>> = {
+  '/agents': <AgentsPage />,
+}
 
 export function AppRoutes() {
   const { role } = useRole()
@@ -14,7 +21,7 @@ export function AppRoutes() {
           <Route
             key={item.path}
             path={item.path}
-            element={<Placeholder title={item.title} issue={item.issue} />}
+            element={PAGES[item.path] ?? <Placeholder title={item.title} issue={item.issue} />}
           />
         ))}
         {role !== 'tester' && (
