@@ -140,6 +140,9 @@ def test_patch_updates_only_the_row(db: MagicMock) -> None:
 
 
 def test_delete_found_and_missing(db: MagicMock) -> None:
+    # The route reads the row first: deleting a mandatory guardrail is admin-only (FR-06).
+    lookup = db.table.return_value.select.return_value.eq.return_value.limit.return_value
+    lookup.execute.return_value.data = [PII_ROW]
     deleted = db.table.return_value.delete.return_value.eq.return_value.execute.return_value
     deleted.data = [{"id": "gr-pii"}]
     assert client.delete(f"{BASE}/gr-pii").status_code == 204

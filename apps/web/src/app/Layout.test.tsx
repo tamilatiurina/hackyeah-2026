@@ -8,7 +8,7 @@ const sidebar = () => document.getElementById('app-sidebar')
 
 async function openMenu() {
   const user = userEvent.setup()
-  renderApp('/fleet')
+  renderApp('/sessions')
   await user.click(menuButton())
   expect(menuButton()).toHaveAttribute('aria-expanded', 'true')
   expect(sidebar()).toHaveAttribute('data-open', 'true')
@@ -23,7 +23,7 @@ function expectClosed() {
 
 describe('phone drawer', () => {
   it('starts closed', () => {
-    renderApp('/fleet')
+    renderApp('/sessions')
     expectClosed()
   })
 
@@ -54,7 +54,7 @@ describe('phone drawer', () => {
 
   it('moves focus to the first nav link when opened', async () => {
     await openMenu()
-    expect(screen.getByRole('link', { name: 'Fleet' })).toHaveFocus()
+    expect(screen.getByRole('link', { name: 'Sessions' })).toHaveFocus()
   })
 
   it('returns focus to the Menu button after Escape', async () => {

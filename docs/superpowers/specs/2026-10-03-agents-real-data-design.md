@@ -1,5 +1,7 @@
 # Agents page on real data, with Supabase sign-in — design
 
+> **Update (A2A):** agents now speak A2A 1.0 ([docs/agent-contract-a2a.md](../../agent-contract-a2a.md)). `request_format` / `response_format` (JSON or text) and the GET ping on the upstream URL are replaced by fetching and storing the agent's Agent Card. The rest of this spec describes the code as built.
+
 Follows D-02 (#55, PR #73) and the agents API from #78. Requirements: FR-01 (#1). Date: 2026-10-03.
 Approved by the user on 2026-10-03.
 

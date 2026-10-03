@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Agent } from '../../api/types'
-import { formatLabel } from './agentDisplay'
+import { cardSummary } from './agentDisplay'
 
-const HEADERS = ['Agent', 'Description', 'Endpoint', 'Formats', 'Auth header']
+const HEADERS = ['Agent', 'Description', 'Agent URL', 'Agent Card', 'Auth header']
 const cell = 'px-4 py-3 align-middle'
 
 function TableFrame({ children, busy = false }: { children: ReactNode; busy?: boolean }) {
@@ -48,9 +48,9 @@ export function AgentsTable({ agents, highlightId }: { agents: readonly Agent[];
               </Link>
             </td>
             <td className={`${cell} max-w-72 text-muted`}>{agent.description || '—'}</td>
-            <td className={`${cell} font-mono text-[13px] break-all text-muted`}>{agent.upstream_url}</td>
-            <td className={`${cell} whitespace-nowrap`}>
-              {formatLabel(agent.request_format)} → {formatLabel(agent.response_format)}
+            <td className={`${cell} font-mono text-[13px] break-all text-muted`}>{agent.base_url}</td>
+            <td className={`${cell} whitespace-nowrap ${agent.agent_card ? '' : 'text-danger'}`}>
+              {cardSummary(agent.agent_card)}
             </td>
             <td className={`${cell} ${agent.auth_header_name ? 'font-mono text-[13px]' : 'text-muted'}`}>
               {agent.auth_header_name ?? 'None'}

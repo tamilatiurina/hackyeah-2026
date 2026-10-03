@@ -33,8 +33,9 @@ export function useGuardrails() {
 
 export function useCreateGuardrail() {
   const queryClient = useQueryClient()
+  const { role } = useRole()
   return useMutation({
-    mutationFn: (body: GuardrailCreate) => postJson<Guardrail>('/guardrails', body),
+    mutationFn: (body: GuardrailCreate) => postJson<Guardrail>('/guardrails', body, { 'X-Role': role }),
     onSuccess: (created) => {
       queryClient.setQueryData<Guardrail[]>(guardrailKeys.guardrails, (old) => [...(old ?? []), created])
       void queryClient.invalidateQueries({ queryKey: guardrailKeys.guardrails })
@@ -44,9 +45,10 @@ export function useCreateGuardrail() {
 
 export function useUpdateGuardrail() {
   const queryClient = useQueryClient()
+  const { role } = useRole()
   return useMutation({
     mutationFn: ({ id, changes }: { id: string; changes: GuardrailUpdate }) =>
-      patchJson<Guardrail>(`/guardrails/${enc(id)}`, changes),
+      patchJson<Guardrail>(`/guardrails/${enc(id)}`, changes, { 'X-Role': role }),
     onSuccess: (updated) => {
       queryClient.setQueryData<Guardrail[]>(guardrailKeys.guardrails, (old) =>
         (old ?? []).map((g) => (g.id === updated.id ? updated : g)),
@@ -58,8 +60,9 @@ export function useUpdateGuardrail() {
 
 export function useDeleteGuardrail() {
   const queryClient = useQueryClient()
+  const { role } = useRole()
   return useMutation({
-    mutationFn: (id: string) => deleteJson(`/guardrails/${enc(id)}`),
+    mutationFn: (id: string) => deleteJson(`/guardrails/${enc(id)}`, { 'X-Role': role }),
     onSuccess: (_, id) => {
       queryClient.setQueryData<Guardrail[]>(guardrailKeys.guardrails, (old) => (old ?? []).filter((g) => g.id !== id))
       void queryClient.invalidateQueries({ queryKey: guardrailKeys.guardrails })

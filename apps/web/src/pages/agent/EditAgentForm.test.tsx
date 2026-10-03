@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { fakeApi } from '../../test/fakeApi'
+import { cardUnreachable, fakeApi } from '../../test/fakeApi'
 import { renderApp } from '../../test/renderApp'
 
 async function openEdit(id = 'agent-support') {
@@ -18,7 +18,8 @@ describe('Edit agent', () => {
     await openEdit()
     expect(screen.getByLabelText('Name')).toHaveValue('Support Assistant')
     expect(screen.getByLabelText('Name')).toHaveFocus()
-    expect(screen.getByLabelText('Upstream URL')).toHaveValue('https://support-agent.acme.example/api/chat')
+    expect(screen.getByLabelText('Agent URL')).toHaveValue('https://support-agent.acme.example')
+    expect(screen.queryByLabelText('Response format')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Keep current')).toBeChecked()
   })
 
@@ -26,11 +27,14 @@ describe('Edit agent', () => {
     const user = await openEdit()
     await user.clear(screen.getByLabelText('Name'))
     await user.type(screen.getByLabelText('Name'), 'Support Bot')
-    await user.selectOptions(screen.getByLabelText('Response format'), 'Text')
+    await user.clear(screen.getByLabelText('Agent URL'))
+    await user.type(screen.getByLabelText('Agent URL'), 'https://support-v2.acme.example')
     await save(user)
     expect(await screen.findByRole('heading', { level: 1, name: 'Support Bot' })).toBeInTheDocument()
-    expect(fakeApi.lastAgentUpdate).toEqual({ name: 'Support Bot', response_format: 'text' })
-    expect(within(screen.getByRole('region', { name: 'Overview' })).getByText('JSON → Text')).toBeInTheDocument()
+    expect(fakeApi.lastAgentUpdate).toEqual({ name: 'Support Bot', base_url: 'https://support-v2.acme.example' })
+    expect(
+      within(screen.getByRole('region', { name: 'Overview' })).getByText('https://support-v2.acme.example'),
+    ).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus())
   })
 
@@ -85,14 +89,12 @@ describe('Edit agent', () => {
     expect(screen.getByLabelText('Name')).toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('explains an unreachable new URL', async () => {
+  it('explains a new URL without a readable Agent Card', async () => {
     const user = await openEdit()
-    await user.clear(screen.getByLabelText('Upstream URL'))
-    await user.type(screen.getByLabelText('Upstream URL'), 'https://x.unreachable.example/')
+    await user.clear(screen.getByLabelText('Agent URL'))
+    await user.type(screen.getByLabelText('Agent URL'), 'https://x.unreachable.example/')
     await save(user)
-    expect(
-      await screen.findByText("Couldn't reach the upstream agent. Check the URL and that it answers GET requests."),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(cardUnreachable('https://x.unreachable.example/'))).toBeInTheDocument()
   })
 
   it('validates before calling the API', async () => {

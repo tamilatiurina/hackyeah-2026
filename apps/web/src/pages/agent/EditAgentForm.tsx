@@ -4,7 +4,7 @@ import { ApiError } from '../../api/client'
 import type { Agent, AgentUpdate } from '../../api/types'
 import { hasErrors, validateAgentForm, type AgentFormErrors } from '../../api/validation'
 import { buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
-import { AgentFields, Field, UNREACHABLE, type AgentFieldValues } from '../agents/AgentFields'
+import { AgentFields, Field, type AgentFieldValues } from '../agents/AgentFields'
 
 type HeaderMode = 'keep' | 'replace' | 'remove' | 'none' | 'add'
 
@@ -16,9 +16,7 @@ export function EditAgentForm({ agent, onClose }: { agent: Agent; onClose: () =>
   const [values, setValues] = useState<AgentFieldValues>({
     name: agent.name,
     description: agent.description,
-    upstreamUrl: agent.upstream_url,
-    requestFormat: agent.request_format,
-    responseFormat: agent.response_format,
+    baseUrl: agent.base_url,
   })
   const [mode, setMode] = useState<HeaderMode>(hasHeader ? 'keep' : 'none')
   const [headerName, setHeaderName] = useState(agent.auth_header_name ?? 'Authorization')
@@ -44,7 +42,7 @@ export function EditAgentForm({ agent, onClose }: { agent: Agent; onClose: () =>
     const found = validateAgentForm({
       name: values.name,
       description: values.description,
-      upstreamUrl: values.upstreamUrl,
+      baseUrl: values.baseUrl,
       sendAuthHeader: sendsHeader,
       authHeaderName: headerName,
       authHeaderValue: headerValue,
@@ -56,9 +54,7 @@ export function EditAgentForm({ agent, onClose }: { agent: Agent; onClose: () =>
     const changes: AgentUpdate = {}
     if (values.name.trim() !== agent.name) changes.name = values.name.trim()
     if (values.description !== agent.description) changes.description = values.description
-    if (values.upstreamUrl.trim() !== agent.upstream_url) changes.upstream_url = values.upstreamUrl.trim()
-    if (values.requestFormat !== agent.request_format) changes.request_format = values.requestFormat
-    if (values.responseFormat !== agent.response_format) changes.response_format = values.responseFormat
+    if (values.baseUrl.trim() !== agent.base_url) changes.base_url = values.baseUrl.trim()
     if (sendsHeader) changes.auth_header = { name: headerName.trim(), value: headerValue }
     if (mode === 'remove') changes.auth_header = null
     if (Object.keys(changes).length === 0) {
@@ -70,10 +66,10 @@ export function EditAgentForm({ agent, onClose }: { agent: Agent; onClose: () =>
       onSuccess: onClose,
       onError: (error) => {
         if (error instanceof ApiError && error.status === 409) setErrors({ name: error.message })
-        else if (error instanceof ApiError && error.status === 502) setFormError(UNREACHABLE)
+        else if (error instanceof ApiError && error.status === 502) setFormError(error.message)
         else if (error instanceof ApiError && error.status === 405) setFormError(EDIT_UNAVAILABLE)
-        else if (error instanceof ApiError && error.status === 422 && error.field === 'upstream_url') {
-          setErrors({ upstreamUrl: error.message })
+        else if (error instanceof ApiError && error.status === 422 && error.field === 'base_url') {
+          setErrors({ baseUrl: error.message })
         } else setFormError(error.message)
       },
     })

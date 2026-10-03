@@ -15,8 +15,10 @@ describe('AgentPage', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Support Assistant' })).toBeInTheDocument()
     const o = within(overview())
     expect(o.getByText('Answers order questions.')).toBeInTheDocument()
-    expect(o.getByText('https://support-agent.acme.example/api/chat')).toBeInTheDocument()
-    expect(o.getByText('JSON → JSON')).toBeInTheDocument()
+    expect(o.getByText('https://support-agent.acme.example')).toBeInTheDocument()
+    expect(o.getByText('https://support-agent.acme.example/a2a')).toBeInTheDocument()
+    expect(o.getByText('v1.0.0 · 1 skill')).toBeInTheDocument()
+    expect(o.getByText('Orders and returns')).toBeInTheDocument()
     expect(o.getByText('Authorization')).toBeInTheDocument()
     expect(o.getByText('agent-support')).toBeInTheDocument()
     expect(o.getByText('1')).toBeInTheDocument() // config version
@@ -28,6 +30,13 @@ describe('AgentPage', () => {
     await screen.findByRole('heading', { level: 1, name: 'Contract Summarizer' })
     expect(within(overview()).getByText('—')).toBeInTheDocument()
     expect(within(overview()).getByText('None')).toBeInTheDocument()
+  })
+
+  it('asks to re-register an agent that has no Agent Card', async () => {
+    renderApp('/agents/agent-contracts')
+    await screen.findByRole('heading', { level: 1, name: 'Contract Summarizer' })
+    expect(within(overview()).getByText(/registered before A2A/)).toBeInTheDocument()
+    expect(within(overview()).queryByText('Skills')).not.toBeInTheDocument()
   })
 
   it('hides the config version when the API does not send it', async () => {

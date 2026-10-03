@@ -24,7 +24,7 @@ function renderUnconfigured() {
   const queryClient = new QueryClient()
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/fleet']}>
+      <MemoryRouter initialEntries={['/sessions']}>
         <AuthProvider client={null}>
           <RoleProvider>
             <AppRoutes />
@@ -47,7 +47,7 @@ describe('sign-in', () => {
 
   it('shows the Supabase error for a wrong password', async () => {
     const user = userEvent.setup()
-    renderApp('/fleet', undefined, { signedIn: false })
+    renderApp('/sessions', undefined, { signedIn: false })
     await signIn(user, 'nope')
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid login credentials')
     expect(location()).toBe('/sign-in')
@@ -70,7 +70,7 @@ describe('sign-in', () => {
 
   it('shows the signed-in email and signs out', async () => {
     const user = userEvent.setup()
-    renderApp('/fleet')
+    renderApp('/sessions')
     expect(screen.getByText(DEMO_EMAIL)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
     await waitFor(() => expect(location()).toBe('/sign-in'))
@@ -92,7 +92,7 @@ describe('sign-in', () => {
 
   it('redirects signed-in users away from /sign-in', () => {
     renderApp('/sign-in')
-    expect(location()).toBe('/fleet')
+    expect(location()).toBe('/sessions')
   })
 
   it('tells production visitors the deployment lacks Supabase settings', () => {
@@ -110,7 +110,7 @@ describe('sign-in', () => {
     const queryClient = new QueryClient()
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/fleet']}>
+        <MemoryRouter initialEntries={['/sessions']}>
           <AuthProvider client={null}>
             <RoleProvider>
               <AppRoutes />

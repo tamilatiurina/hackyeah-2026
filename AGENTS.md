@@ -34,14 +34,18 @@ trace and the same report.
   under `/api/v1`.
 - `apps/web` – React + Vite + TypeScript panel (pnpm project, not part of the uv workspace).
 - `apps/cli` – Typer CLI (`acme-cli`, module `acme_cli`, command `acme`), in the root workspace.
-- `apps/agents` – demo agents used to show the control layer off. Plain `requirements.txt`, not
-  part of any workspace. The support assistant is deliberately unguarded: its system prompt
+- `apps/agents` – demo A2A agents used to show the control layer off. Plain `requirements.txt`,
+  not part of any workspace. The support assistant is deliberately unguarded: its system prompt
   holds a customer record and an internal note, so it leaks them when asked. That is the
   "before" picture our guardrails fix.
+- `apps/test-agent` – deterministic A2A 1.0 test agent (`acme-test-agent`, run with
+  `make test-agent`), in the root workspace. Trigger messages (`#pii`, `#inject`, `#slow N`, …)
+  set off each guardrail and limit.
 - `packages/core` – shared Python library (`acme-core`, module `acme_core`) for code used by
   both the CLI and the API.
 
-The root uv workspace is `apps/cli` + `packages/*` with one `uv.lock` and one `.venv`.
+The root uv workspace is `apps/cli` + `apps/test-agent` + `packages/*` with one `uv.lock` and
+one `.venv`.
 `apps/api` is synced separately. Python 3.12 everywhere.
 
 ## Commands
@@ -108,6 +112,17 @@ the mandatory floor. The `version` field is a hash of the resolved set: cache an
 policy under it, and config edits are picked up on the next request without a restart.
 
 Attach, detach and reorder through `POST`, `PATCH` and `DELETE /api/v1/bindings`.
+
+### Agents speak A2A 1.0
+
+Every agent the API registers, calls or exposes speaks [A2A 1.0](https://a2a-protocol.org/v1.0.0/specification/)
+over JSON-RPC, as profiled in `docs/agent-contract-a2a.md`. That doc is the source of truth; don't
+invent other agent payload formats. Registration reads the agent's Agent Card from
+`<base_url>/.well-known/agent-card.json`; `upstream_url` is the card's JSON-RPC endpoint and
+`agent_card` the stored snapshot. Use the A2A spec's field names (`messageId`, `contextId`,
+`parts`, `ROLE_USER`, `TASK_STATE_REJECTED`, …); hub data goes only in A2A `metadata` under the
+`guardrailHub` key. Use `apps/test-agent` to exercise anything that talks to an agent. pi coding
+agents are a separate feature, not part of this app.
 
 ### Injection signatures
 

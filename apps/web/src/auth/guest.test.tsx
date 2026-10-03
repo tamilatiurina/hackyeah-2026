@@ -26,7 +26,7 @@ describe('guest sessions', () => {
   })
 
   it('shows a guest label and no Sign out for guests', async () => {
-    renderApp('/fleet', undefined, { signedIn: false, guest: true })
+    renderApp('/sessions', undefined, { signedIn: false, guest: true })
     expect(await screen.findByText('Guest session')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
   })

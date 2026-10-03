@@ -17,21 +17,21 @@ describe('AppRoutes', () => {
   )
 
   it('lists every nav item for admins', () => {
-    renderApp('/fleet')
+    renderApp('/sessions')
     const labels = within(mainNav())
       .getAllByRole('link')
       .map((a) => a.textContent)
     expect(labels).toEqual(NAV_ITEMS.map((i) => i.label))
   })
 
-  it('redirects / to /fleet', () => {
+  it('redirects / to /sessions', () => {
     renderApp('/')
-    expect(location()).toBe('/fleet')
+    expect(location()).toBe('/sessions')
   })
 
-  it('redirects an unknown path to /fleet', () => {
+  it('redirects an unknown path to /sessions', () => {
     renderApp('/nope')
-    expect(location()).toBe('/fleet')
+    expect(location()).toBe('/sessions')
   })
 
   it('keeps Agents active on an agent page', async () => {
@@ -44,7 +44,7 @@ describe('AppRoutes', () => {
   })
 
   it('sends a tester to /test and shows only Test chat', () => {
-    renderApp('/fleet', 'tester')
+    renderApp('/sessions', 'tester')
     expect(location()).toBe('/test')
     const labels = within(mainNav())
       .getAllByRole('link')
@@ -57,13 +57,13 @@ describe('AppRoutes', () => {
     expect(location()).toBe('/test')
   })
 
-  it('switching to Tester goes to /test, and back to Developer goes to /fleet', async () => {
+  it('switching to Tester goes to /test, and back to Developer goes to /sessions', async () => {
     const user = userEvent.setup()
     renderApp('/policies')
     await user.click(screen.getByRole('button', { name: 'Tester' }))
     expect(location()).toBe('/test')
     await user.click(screen.getByRole('button', { name: 'Developer' }))
-    expect(location()).toBe('/fleet')
+    expect(location()).toBe('/sessions')
   })
 
   it('switching between Admin and Developer keeps the current page', async () => {

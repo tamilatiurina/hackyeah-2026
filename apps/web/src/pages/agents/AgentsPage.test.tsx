@@ -14,12 +14,12 @@ describe('AgentsPage', () => {
     await screen.findByRole('link', { name: 'Support Assistant' })
     const support = within(rowOf('Support Assistant'))
     expect(support.getByText('Answers order questions.')).toBeInTheDocument()
-    expect(support.getByText('https://support-agent.acme.example/api/chat')).toBeInTheDocument()
-    expect(support.getByText('JSON → JSON')).toBeInTheDocument()
+    expect(support.getByText('https://support-agent.acme.example')).toBeInTheDocument()
+    expect(support.getByText('v1.0.0 · 1 skill')).toBeInTheDocument()
     expect(support.getByText('Authorization')).toBeInTheDocument()
     const contracts = within(rowOf('Contract Summarizer'))
     expect(contracts.getByText('—')).toBeInTheDocument()
-    expect(contracts.getByText('Text → Text')).toBeInTheDocument()
+    expect(contracts.getByText('No Agent Card')).toBeInTheDocument()
     expect(contracts.getByText('None')).toBeInTheDocument()
     expect(rowOf('Support Assistant').querySelector('a')).toHaveAttribute('href', '/agents/agent-support')
   })
@@ -29,6 +29,7 @@ describe('AgentsPage', () => {
     await screen.findByRole('link', { name: 'Support Assistant' })
     expect(screen.queryByRole('group', { name: 'Filter by group' })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Formats' })).not.toBeInTheDocument()
   })
 
   it('shows the empty state', async () => {

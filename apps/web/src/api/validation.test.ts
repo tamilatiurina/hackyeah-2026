@@ -4,7 +4,7 @@ import { isHttpUrl, validateAgentForm, type AgentForm } from './validation'
 const valid: AgentForm = {
   name: 'Billing Bot',
   description: '',
-  upstreamUrl: 'https://billing.example/chat',
+  baseUrl: 'https://billing.example',
   sendAuthHeader: false,
   authHeaderName: 'Authorization',
   authHeaderValue: '',
@@ -21,8 +21,8 @@ describe('validateAgentForm', () => {
     expect(validateAgentForm({ ...valid, description: 'x'.repeat(1001) }).description).toBe(
       'Use at most 1,000 characters',
     )
-    expect(validateAgentForm({ ...valid, upstreamUrl: '' }).upstreamUrl).toBe('Upstream URL is required')
-    expect(validateAgentForm({ ...valid, upstreamUrl: 'ftp://x' }).upstreamUrl).toBe('Enter an http or https URL')
+    expect(validateAgentForm({ ...valid, baseUrl: '' }).baseUrl).toBe('Agent URL is required')
+    expect(validateAgentForm({ ...valid, baseUrl: 'ftp://x' }).baseUrl).toBe('Enter an http or https URL')
   })
 
   it('requires header name and value only when sending a header', () => {

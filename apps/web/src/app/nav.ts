@@ -8,8 +8,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { path: '/fleet', label: 'Fleet', title: 'Fleet', issue: 'D-06' },
-  { path: '/approvals', label: 'Approvals', title: 'Approvals', issue: 'D-06' },
+  { path: '/sessions', label: 'Sessions', title: 'Sessions', issue: 'D-06' },
   { path: '/agents', label: 'Agents', title: 'Agents', issue: 'D-02' },
   { path: '/guardrails', label: 'Guardrails', title: 'Guardrails', issue: 'D-05' },
   { path: '/policies', label: 'Policies', title: 'Policies', issue: 'D-05' },
@@ -20,7 +19,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 ]
 
 export const TESTER_HOME = '/test'
-export const DEFAULT_HOME = '/fleet'
+export const DEFAULT_HOME = '/sessions'
 
 export function homeFor(role: Role): string {
   return role === 'tester' ? TESTER_HOME : DEFAULT_HOME
