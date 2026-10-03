@@ -162,6 +162,10 @@ begin
     if jsonb_typeof(p_events) <> 'array' then
         raise exception 'p_events must be a JSON array' using errcode = '22023';
     end if;
+    -- One call reports one message's hits; a cap keeps a key holder from flooding the log.
+    if jsonb_array_length(p_events) > 100 then
+        raise exception 'At most 100 events per call' using errcode = '22023';
+    end if;
 
     insert into public.audit_events
         (agent_id, context_id, rule_id, rule_name, kind, stage, action, config_version, details)

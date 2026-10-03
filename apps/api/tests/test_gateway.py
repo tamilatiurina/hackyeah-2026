@@ -26,6 +26,7 @@ from app.audit.memory import MEMORY
 from app.audit.recorder import InMemoryAuditRecorder, get_audit_recorder
 from app.bindings.models import EffectivePolicy
 from app.bindings.resolve import resolve
+from app.gateway import a2a
 from app.gateway import router as gateway_router
 from app.gateway.keys import KEY_PREFIX, hash_key
 from app.gateway.policy import get_policy_loader
@@ -427,7 +428,9 @@ def reply_with_usage(usage: object) -> Callable[[httpx.Request], httpx.Response]
             "parts": [{"text": "ok"}],
             "metadata": {"usage": usage},
         }
-        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"message": message}})
+        # json.dumps writes Infinity/NaN as the stdlib json reader accepts them (an agent might too)
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"message": message}})
+        return httpx.Response(200, content=body, headers={"Content-Type": "application/json"})
 
     return rpc
 
@@ -440,7 +443,18 @@ def test_a_forwarded_call_counts_a_turn_with_the_reply_usage() -> None:
     assert (session.turns, session.input_tokens, session.output_tokens) == (2, 24, 14)
 
 
-@pytest.mark.parametrize("usage", [None, "lots", {"inputTokens": "x"}, {"inputTokens": -5}])
+@pytest.mark.parametrize(
+    "usage",
+    [
+        None,
+        "lots",
+        {"inputTokens": "x"},
+        {"inputTokens": -5},
+        {"inputTokens": float("inf")},
+        {"inputTokens": float("nan")},
+        {"inputTokens": True},
+    ],
+)
 def test_missing_or_bad_usage_counts_zero_tokens(usage: object) -> None:
     scripted_upstream(reply_with_usage(usage))
     assert post(with_context("ctx-1")).status_code == 200
@@ -473,3 +487,10 @@ def test_a_recorder_failure_does_not_change_the_reply() -> None:
     r = post(with_context("ctx-1"))
     assert r.status_code == 200
     assert r.json()["result"]["message"]["parts"] == [{"text": "ok"}]
+
+
+def test_huge_usage_is_capped_so_the_counter_fits_the_database() -> None:
+    scripted_upstream(reply_with_usage({"inputTokens": 1e20, "outputTokens": 3}))
+    assert post(with_context("ctx-1")).status_code == 200
+    session = MEMORY.sessions[(AGENT_ID, "ctx-1")]
+    assert (session.input_tokens, session.output_tokens) == (a2a.MAX_REPORTED_TOKENS, 3)

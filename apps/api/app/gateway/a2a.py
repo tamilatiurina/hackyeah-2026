@@ -4,6 +4,7 @@ A2A 1.0 uses protobuf JSON: camelCase keys and enum values like "TASK_STATE_COMP
 """
 
 import json
+import math
 from typing import Any
 from uuid import uuid4
 
@@ -172,6 +173,10 @@ def rejected_task(context_id: Any, reason: str, hub: Json) -> Json:
     }
 
 
+# One reply's token count is capped so session counters stay within Postgres bigint.
+MAX_REPORTED_TOKENS = 10**12
+
+
 def usage_tokens(reply: dict[str, Any]) -> tuple[int, int]:
     """(input, output) tokens from the reply's metadata.usage (profile §usage), else (0, 0)."""
     result = reply.get("result")
@@ -187,10 +192,10 @@ def usage_tokens(reply: dict[str, Any]) -> tuple[int, int]:
 
     def count(name: str) -> int:
         value = usage.get(name)
-        return (
-            max(int(value), 0)
-            if isinstance(value, int | float) and not isinstance(value, bool)
-            else 0
-        )
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return 0
+        if not math.isfinite(value):  # the stdlib reader accepts Infinity and NaN
+            return 0
+        return min(max(int(value), 0), MAX_REPORTED_TOKENS)
 
     return count("inputTokens"), count("outputTokens")
