@@ -9,7 +9,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [react(), tailwindcss()],
-    server: { proxy: { '/api': env.API_URL || 'http://localhost:8000' } },
+    // /a/ is the guarded A2A gateway (B-01), served at the API root like on Vercel (vercel.json).
+    server: {
+      proxy: {
+        '/api': env.API_URL || 'http://localhost:8000',
+        '/a/': env.API_URL || 'http://localhost:8000',
+      },
+    },
     // Ship exactly these two to the browser, under the same names the API uses. SUPABASE_KEY must be
     // the publishable/anon key. (A SUPABASE_ envPrefix would also ship e.g. the service-role key.)
     define: {

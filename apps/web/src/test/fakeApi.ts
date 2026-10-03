@@ -246,6 +246,8 @@ export const fakeApi: {
   flagsSupported: boolean
   testChatRequests: SendMessageRequest[]
   flags: unknown[]
+  gatewayKeys: Record<string, string>
+  gatewayKeyCount: number
 } = {
   guardrails: seedGuardrails(),
   signatures: seedSignatures(),
@@ -259,6 +261,8 @@ export const fakeApi: {
   flagsSupported: true,
   testChatRequests: [],
   flags: [],
+  gatewayKeys: {},
+  gatewayKeyCount: 0,
   bindings: seedBindings(),
   bindingsSupported: true,
   bindingRequests: [],
@@ -282,6 +286,8 @@ export function resetFakeApi(): void {
   fakeApi.flagsSupported = true
   fakeApi.testChatRequests = []
   fakeApi.flags = []
+  fakeApi.gatewayKeys = {}
+  fakeApi.gatewayKeyCount = 0
 }
 
 const detail = (status: number, message: string) => HttpResponse.json({ detail: message }, { status })
@@ -457,6 +463,18 @@ export const fakeApiHandlers = [
     fakeApi.agents = fakeApi.agents.filter((a) => a.id !== params.id)
     return new HttpResponse(null, { status: 204 })
   }),
+  http.post(apiPath('/agents/:id/gateway-key'), ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    const id = String(params.id)
+    if (!fakeApi.agents.some((a) => a.id === id)) return detail(404, 'Agent not found')
+    const key = `ghk_test_${++fakeApi.gatewayKeyCount}`
+    fakeApi.gatewayKeys[id] = key
+    return HttpResponse.json(
+      { agent_id: id, key, gateway_path: `/a/${id}`, agent_card_path: `/a/${id}/.well-known/agent-card.json` },
+      { status: 201 },
+    )
+  }),
+
   http.post(apiPath('/agents/:id/test-chat'), async ({ request, params }) => {
     if (!signedIn(request)) return notAuthenticated()
     if (!fakeApi.testChatSupported) return detail(404, 'Not Found')

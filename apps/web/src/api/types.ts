@@ -53,6 +53,15 @@ export interface AgentUpdate {
   auth_header?: { name: string; value: string } | null
 }
 
+/** POST /agents/{id}/gateway-key (B-01). The key is returned once; only its hash is stored. */
+export interface GatewayKey {
+  agent_id: string
+  key: string
+  /** Relative to the API root (not under /api/v1), e.g. "/a/{id}". */
+  gateway_path: string
+  agent_card_path: string
+}
+
 // --- guardrails and injection signatures (mirror apps/api/app/guardrails/models.py) ---
 
 export type Engine = 'regex' | 'llm_judge' | 'library' | 'moderation'

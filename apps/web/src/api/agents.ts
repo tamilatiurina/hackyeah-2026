@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteJson, getJson, patchJson, postJson } from './client'
-import type { Agent, AgentList, AgentRegistration, AgentUpdate } from './types'
+import type { Agent, AgentList, AgentRegistration, AgentUpdate, GatewayKey } from './types'
 
 export const agentKeys = {
   agents: ['agents'] as const,
@@ -52,4 +52,9 @@ export function useDeleteAgent() {
       queryClient.setQueryData<Agent[]>(agentKeys.agents, (old) => old?.filter((a) => a.id !== id))
     },
   })
+}
+
+/** Creates the agent's gateway key, replacing any previous one. */
+export function useCreateGatewayKey(id: string) {
+  return useMutation({ mutationFn: () => postJson<GatewayKey>(`/agents/${enc(id)}/gateway-key`, {}) })
 }

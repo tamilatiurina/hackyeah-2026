@@ -3,6 +3,7 @@
   "buildCommand": "npx pnpm@12.8.1 run build",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://hackyeah-2026-8v1w.vercel.app/api/$1" },
+    { "source": "/a/(.*)", "destination": "https://hackyeah-2026-8v1w.vercel.app/a/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
