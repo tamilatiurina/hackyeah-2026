@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import { RequireAuth } from '../auth/RequireAuth'
 import { AgentPage } from '../pages/agent/AgentPage'
 import { AgentsPage } from '../pages/agents/AgentsPage'
+import { AuditLogPage } from '../pages/audit/AuditLogPage'
 import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
 import { McpServersPage } from '../pages/mcp/McpServersPage'
 import { Placeholder } from '../pages/Placeholder'
@@ -15,6 +16,7 @@ import { useRole } from './role'
 // Screens that exist; every other nav item renders its placeholder.
 const PAGES: Partial<Record<string, ReactElement>> = {
   '/agents': <AgentsPage />,
+  '/audit': <AuditLogPage />,
   '/guardrails': <GuardrailsPage />,
   '/mcp': <McpServersPage />,
   '/test': <TestChatPage />,
