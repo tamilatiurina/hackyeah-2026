@@ -75,13 +75,15 @@ export interface ApiErrorBody { message: string; field?: string }
 
 ## Endpoints
 
+All paths are under `/api/v1`, where the FastAPI app mounts its routes (`API_V1_STR`).
+
 | Call | Success | Errors |
 |---|---|---|
-| `GET /api/agents` | 200 `Agent[]` | — |
-| `GET /api/groups` | 200 `Group[]` | — |
-| `POST /api/groups` `{name}` | 201 `Group` | 409 name taken; 422 empty name |
-| `POST /api/agents` `RegisterAgentInput` | 201 `Agent` | 409 name taken; 422 invalid fields or unreachable proxy URL |
-| `POST /api/agents/test-connection` `{upstreamUrl}` | 200 `ConnectionResult` | 422 missing URL |
+| `GET /api/v1/agents` | 200 `Agent[]` | — |
+| `GET /api/v1/groups` | 200 `Group[]` | — |
+| `POST /api/v1/groups` `{name}` | 201 `Group` | 409 name taken; 422 empty name |
+| `POST /api/v1/agents` `RegisterAgentInput` | 201 `Agent` | 409 name taken; 422 invalid fields or unreachable proxy URL |
+| `POST /api/v1/agents/test-connection` `{upstreamUrl}` | 200 `ConnectionResult` | 422 missing URL |
 
 Error responses use `ApiErrorBody`. Names are compared case-insensitively for uniqueness.
 

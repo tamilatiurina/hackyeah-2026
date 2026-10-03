@@ -1,5 +1,12 @@
 import type { ApiErrorBody } from './types'
 
+// FastAPI mounts every route under settings.API_V1_STR (apps/api/app/core/config.py).
+export const API_PREFIX = '/api/v1'
+
+export function apiPath(path: string): string {
+  return `${API_PREFIX}${path}`
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly field: string | undefined
@@ -22,7 +29,7 @@ function parseJson(text: string): unknown {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Resolve against the page origin so relative paths also work under Node's fetch in tests.
-  const url = new URL(path, window.location.origin)
+  const url = new URL(apiPath(path), window.location.origin)
   let response: Response
   try {
     response = await fetch(url, init)

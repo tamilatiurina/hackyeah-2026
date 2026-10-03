@@ -2,6 +2,7 @@ import { delay, http, HttpResponse } from 'msw'
 import type { Agent, ApiErrorBody, Group, RegisterAgentInput } from '../api/types'
 import { checkReachable, validateRegistration } from '../api/validation'
 import { db, slugify, uniqueId } from './db'
+import { apiPath } from '../api/client'
 
 // Visible loading states in the browser; instant in tests.
 const latency = () => (import.meta.env.MODE === 'test' ? Promise.resolve() : delay(300))
@@ -14,17 +15,17 @@ function fail(status: number, message: string, field?: string) {
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 export const handlers = [
-  http.get('/api/agents', async () => {
+  http.get(apiPath('/agents'), async () => {
     await latency()
     return HttpResponse.json(db.agents)
   }),
 
-  http.get('/api/groups', async () => {
+  http.get(apiPath('/groups'), async () => {
     await latency()
     return HttpResponse.json(db.groups)
   }),
 
-  http.post('/api/groups', async ({ request }) => {
+  http.post(apiPath('/groups'), async ({ request }) => {
     await latency()
     const body = (await request.json()) as { name?: string }
     const name = body.name?.trim() ?? ''
@@ -37,7 +38,7 @@ export const handlers = [
     return HttpResponse.json(group, { status: 201 })
   }),
 
-  http.post('/api/agents/test-connection', async ({ request }) => {
+  http.post(apiPath('/agents/test-connection'), async ({ request }) => {
     await latency()
     const body = (await request.json()) as { upstreamUrl?: string }
     const url = body.upstreamUrl?.trim() ?? ''
@@ -45,7 +46,7 @@ export const handlers = [
     return HttpResponse.json(checkReachable(url))
   }),
 
-  http.post('/api/agents', async ({ request }) => {
+  http.post(apiPath('/agents'), async ({ request }) => {
     await latency()
     const input = (await request.json()) as RegisterAgentInput
     const errors = validateRegistration(input)
