@@ -4,6 +4,7 @@ import { useAgents, useGroups } from '../../api/agents'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { AgentsTable, AgentsTableSkeleton } from './AgentsTable'
 import { GroupChips } from './GroupChips'
+import { RegisterAgentForm } from './RegisterAgentForm'
 
 export function AgentsPage() {
   const agents = useAgents()
@@ -70,6 +71,14 @@ export function AgentsPage() {
           </button>
         )}
       </header>
+      {registering && (
+        <RegisterAgentForm
+          groups={groupList}
+          defaultGroupId={selectedGroupId ?? groupList[0]?.id ?? ''}
+          onClose={() => setRegistering(false)}
+          onRegistered={(agent) => setHighlightId(agent.id)}
+        />
+      )}
       <GroupChips groups={groupList} selectedId={selectedGroupId} onSelect={selectGroup} />
       {content}
     </section>
