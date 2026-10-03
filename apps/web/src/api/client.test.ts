@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '../test/server'
-import { ApiError, apiPath, getJson, postJson } from './client'
+import { ApiError, apiPath, deleteJson, getJson, patchJson, postJson } from './client'
 
 describe('api client', () => {
   it('sends requests under /api/v1, where FastAPI mounts its routes', async () => {
@@ -63,5 +63,60 @@ describe('api client', () => {
       status: 0,
       message: 'Network error: could not reach the server',
     })
+  })
+
+  it('reads FastAPI string details', async () => {
+    server.use(http.get(apiPath('/missing'), () => HttpResponse.json({ detail: 'Guardrail not found' }, { status: 404 })))
+    await expect(getJson('/missing')).rejects.toMatchObject({ status: 404, message: 'Guardrail not found' })
+  })
+
+  it('reads FastAPI validation details without the "Value error" prefix', async () => {
+    server.use(
+      http.post(apiPath('/invalid'), () =>
+        HttpResponse.json(
+          {
+            detail: [
+              { type: 'value_error', loc: ['body', 'name'], msg: 'Value error, name is too long', input: 'x' },
+            ],
+          },
+          { status: 422 },
+        ),
+      ),
+    )
+    await expect(postJson('/invalid', {})).rejects.toMatchObject({
+      status: 422,
+      message: 'name is too long',
+      field: 'name',
+    })
+  })
+
+  it('does not report a model-level error as a field called body', async () => {
+    server.use(
+      http.post(apiPath('/invalid'), () =>
+        HttpResponse.json(
+          { detail: [{ type: 'value_error', loc: ['body'], msg: "Value error, engine 'regex' not allowed", input: {} }] },
+          { status: 422 },
+        ),
+      ),
+    )
+    const error = await postJson('/invalid', {}).catch((e: unknown) => e)
+    expect(error).toMatchObject({ message: "engine 'regex' not allowed", field: undefined })
+  })
+
+  it('sends PATCH and DELETE with extra headers', async () => {
+    const seen: string[] = []
+    server.use(
+      http.patch(apiPath('/thing'), async ({ request }) => {
+        seen.push(`PATCH ${request.headers.get('X-Role')}`)
+        return HttpResponse.json(await request.json())
+      }),
+      http.delete(apiPath('/thing'), ({ request }) => {
+        seen.push(`DELETE ${request.headers.get('X-Role')}`)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    await expect(patchJson('/thing', { enabled: false }, { 'X-Role': 'admin' })).resolves.toEqual({ enabled: false })
+    await expect(deleteJson('/thing', { 'X-Role': 'admin' })).resolves.toBeUndefined()
+    expect(seen).toEqual(['PATCH admin', 'DELETE admin'])
   })
 })
