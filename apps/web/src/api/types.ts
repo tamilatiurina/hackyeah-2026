@@ -163,3 +163,36 @@ export interface EffectivePolicy {
   input: EffectiveGuardrail[]
   output: EffectiveGuardrail[]
 }
+
+// --- MCP servers (FR-16, mirror apps/api/app/mcp/models.py) ---
+
+export type McpAuthType = 'none' | 'api_key' | 'oauth'
+
+/** What the API sends to register a server; secrets go in, never come back. */
+export type McpAuth =
+  | { type: 'none' }
+  | { type: 'api_key'; header: string; api_key: string }
+  | { type: 'oauth'; token_url: string; client_id: string; client_secret: string; scopes: string[] }
+
+export interface McpServerCreate {
+  name: string
+  url: string
+  auth: McpAuth
+  allowed_tools: string[]
+}
+
+export interface McpServer {
+  id: string
+  name: string
+  url: string
+  auth: {
+    type: McpAuthType
+    header?: string | null
+    client_id?: string | null
+    scopes: string[]
+    has_secret: boolean
+  }
+  allowed_tools: string[]
+  /** Agents using the server (filled in once FR-17 attaches servers to agents). */
+  agents: number
+}

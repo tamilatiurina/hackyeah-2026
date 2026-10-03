@@ -20,6 +20,8 @@ import type {
   GuardrailTemplate,
   GuardrailUpdate,
   InjectionSignature,
+  McpServer,
+  McpServerCreate,
 } from '../api/types'
 import { TEST_TOKEN } from './fakeAuth'
 
@@ -116,6 +118,19 @@ const signedIn = (request: Request) => request.headers.get('Authorization') === 
 const notAuthenticated = () => detail(401, 'Not authenticated')
 
 const methodNotAllowed = () => detail(405, 'Method Not Allowed')
+
+function seedMcpServers(): McpServer[] {
+  return [
+    {
+      id: 'mcp-orders',
+      name: 'Orders',
+      url: 'https://mcp.acme.example/orders',
+      auth: { type: 'api_key', header: 'X-Api-Key', scopes: [], has_secret: true },
+      allowed_tools: ['get_order', 'list_orders'],
+      agents: 0,
+    },
+  ]
+}
 
 function seedBindings(): Binding[] {
   return [
@@ -248,6 +263,8 @@ export const fakeApi: {
   flags: unknown[]
   gatewayKeys: Record<string, string>
   gatewayKeyCount: number
+  mcpServers: McpServer[]
+  lastMcpServerCreate: McpServerCreate | null
 } = {
   guardrails: seedGuardrails(),
   signatures: seedSignatures(),
@@ -263,6 +280,8 @@ export const fakeApi: {
   flags: [],
   gatewayKeys: {},
   gatewayKeyCount: 0,
+  mcpServers: seedMcpServers(),
+  lastMcpServerCreate: null,
   bindings: seedBindings(),
   bindingsSupported: true,
   bindingRequests: [],
@@ -288,6 +307,8 @@ export function resetFakeApi(): void {
   fakeApi.flags = []
   fakeApi.gatewayKeys = {}
   fakeApi.gatewayKeyCount = 0
+  fakeApi.mcpServers = seedMcpServers()
+  fakeApi.lastMcpServerCreate = null
 }
 
 const detail = (status: number, message: string) => HttpResponse.json({ detail: message }, { status })
@@ -463,6 +484,38 @@ export const fakeApiHandlers = [
     fakeApi.agents = fakeApi.agents.filter((a) => a.id !== params.id)
     return new HttpResponse(null, { status: 204 })
   }),
+  http.get(apiPath('/mcp-servers'), () => HttpResponse.json(fakeApi.mcpServers)),
+
+  http.post(apiPath('/mcp-servers'), async ({ request }) => {
+    const body = (await request.json()) as McpServerCreate
+    fakeApi.lastMcpServerCreate = body
+    if (fakeApi.mcpServers.some((s) => s.name === body.name)) {
+      return detail(409, `MCP server '${body.name}' already exists`)
+    }
+    const auth = body.auth
+    const server: McpServer = {
+      id: `mcp-${fakeApi.nextId++}`,
+      name: body.name,
+      url: body.url,
+      auth:
+        auth.type === 'api_key'
+          ? { type: 'api_key', header: auth.header, scopes: [], has_secret: true }
+          : auth.type === 'oauth'
+            ? { type: 'oauth', client_id: auth.client_id, scopes: auth.scopes, has_secret: true }
+            : { type: 'none', scopes: [], has_secret: false },
+      allowed_tools: body.allowed_tools,
+      agents: 0,
+    }
+    fakeApi.mcpServers.push(server)
+    return HttpResponse.json(server, { status: 201 })
+  }),
+
+  http.delete(apiPath('/mcp-servers/:id'), ({ params }) => {
+    if (!fakeApi.mcpServers.some((s) => s.id === params.id)) return detail(404, 'MCP server not found')
+    fakeApi.mcpServers = fakeApi.mcpServers.filter((s) => s.id !== params.id)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.post(apiPath('/agents/:id/gateway-key'), ({ request, params }) => {
     if (!signedIn(request)) return notAuthenticated()
     const id = String(params.id)

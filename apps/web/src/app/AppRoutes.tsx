@@ -4,6 +4,7 @@ import { RequireAuth } from '../auth/RequireAuth'
 import { AgentPage } from '../pages/agent/AgentPage'
 import { AgentsPage } from '../pages/agents/AgentsPage'
 import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
+import { McpServersPage } from '../pages/mcp/McpServersPage'
 import { Placeholder } from '../pages/Placeholder'
 import { SignInPage } from '../pages/SignInPage'
 import { TestChatPage } from '../pages/test/TestChatPage'
@@ -15,6 +16,7 @@ import { useRole } from './role'
 const PAGES: Partial<Record<string, ReactElement>> = {
   '/agents': <AgentsPage />,
   '/guardrails': <GuardrailsPage />,
+  '/mcp': <McpServersPage />,
   '/test': <TestChatPage />,
 }
 
