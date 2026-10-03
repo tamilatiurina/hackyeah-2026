@@ -162,3 +162,15 @@ class InjectionSignature(BaseModel):
     @classmethod
     def must_compile(cls, v: str) -> str:
         return _must_compile(v)
+
+
+# --- dry run ---
+class DryRunRequest(GuardrailRule):
+    text: str = Field(min_length=1, max_length=10_000)
+
+
+class DryRunResult(BaseModel):
+    result: Literal["pass", "block", "redact", "warn"]
+    reason: str
+    output: str | None = None
+    simulated: bool

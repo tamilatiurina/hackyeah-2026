@@ -2,8 +2,11 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Response, status
 
+from app.guardrails.evaluate import evaluate
 from app.guardrails.models import (
     TEMPLATES,
+    DryRunRequest,
+    DryRunResult,
     Guardrail,
     GuardrailCreate,
     GuardrailUpdate,
@@ -36,6 +39,11 @@ def create_guardrail(body: GuardrailCreate) -> Guardrail:
     guardrail = Guardrail(id=f"gr-{uuid4().hex[:8]}", **body.model_dump())
     store.guardrails[guardrail.id] = guardrail
     return guardrail
+
+
+@router.post("/guardrails/dry-run")
+def dry_run(body: DryRunRequest) -> DryRunResult:
+    return evaluate(body, body.text, list(store.signatures.values()))
 
 
 @router.get("/guardrails/{guardrail_id}")
