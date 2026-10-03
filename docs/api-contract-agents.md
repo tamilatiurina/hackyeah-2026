@@ -41,3 +41,64 @@ interface Guardrail { /* … */ is_mandatory?: boolean }  // applies to every ag
 
 Until these exist the web app shows "… isn't available on this API yet" (it treats 405 and a missing
 `attached_rules` as "not implemented").
+
+## B-06: test chat — proposed
+
+### `POST /api/v1/agents/{id}/test-chat`
+
+Request: a JSON-RPC 2.0 `SendMessage`, exactly as a client would send to the guarded URL.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-1",
+  "method": "SendMessage",
+  "params": {
+    "message": {
+      "messageId": "…",
+      "contextId": "ctx-…",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "#pii" }]
+    }
+  }
+}
+```
+
+Response: the guarded pipeline's JSON-RPC response: `result.message` (passed, redacted or warned)
+or `result.task` (a `TASK_STATE_REJECTED` refusal when blocked, or a finished task), or a JSON-RPC
+`error` passed through from the agent. Hub data lives in `metadata.guardrailHub` on the message or
+task:
+
+```ts
+interface GuardrailHubMetadata {
+  blocked?: boolean
+  stage?: 'input' | 'output'          // where a block happened
+  trace?: TraceEntry[]
+  usage?: { inputTokens: number; outputTokens: number; costUsd?: number }
+  limits?: { name: string; used: number; max: number; unit?: string }[]
+  scores?: { name: string; score: number }[]   // evaluators (S-01), optional
+}
+
+interface TraceEntry {               // one guardrail run (T-04 check result + who ran it)
+  guardrailId: string
+  guardrailName: string
+  engine: 'regex' | 'llm_judge' | 'library' | 'moderation'
+  stage: 'input' | 'output'
+  verdict: 'pass' | 'block' | 'redact' | 'warn'
+  reason: string
+  latencyMs: number
+  simulated?: boolean
+}
+```
+
+HTTP errors: 401 (session), 404 (unknown agent), 405/404 when the endpoint doesn't exist yet.
+
+## FR-12: flag a reply — proposed
+
+### `POST /api/v1/agents/{id}/flags`
+
+Body `{ contextId, messageId, comment }` → 201. The owning developer sees flags later (not in this
+slice).
+
+The web app treats a 404/405 from these endpoints as "not implemented yet". The A2A shapes follow
+`docs/agent-contract-a2a.md`.
