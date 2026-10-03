@@ -85,6 +85,8 @@ export interface Reply {
 }
 
 export const UNFINISHED_TASK = "The agent answered with an unfinished task (outside the hub's A2A profile)."
+export const TASK_FAILED = 'The agent reported that the task failed.'
+export const TASK_CANCELED = 'The agent canceled the task.'
 
 const TERMINAL: ReadonlySet<TaskState> = new Set([
   'TASK_STATE_COMPLETED',
@@ -140,5 +142,8 @@ export function readReply(response: SendMessageResponse, fallbackId: string): Re
     task.metadata ?? task.status.message?.metadata,
   )
   if (task.status.state === 'TASK_STATE_REJECTED') reply.verdict = 'blocked'
+  // A failed or canceled task is never a success, whatever the guardrails said.
+  if (task.status.state === 'TASK_STATE_FAILED') return { ...reply, verdict: 'error', errorMessage: TASK_FAILED }
+  if (task.status.state === 'TASK_STATE_CANCELED') return { ...reply, verdict: 'error', errorMessage: TASK_CANCELED }
   return reply
 }

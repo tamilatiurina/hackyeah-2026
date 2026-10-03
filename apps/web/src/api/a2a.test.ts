@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readReply, UNFINISHED_TASK, type SendMessageResponse, type TraceEntry } from './a2a'
+import { readReply, TASK_CANCELED, TASK_FAILED, UNFINISHED_TASK, type SendMessageResponse, type TraceEntry } from './a2a'
 
 const run = (verdict: TraceEntry['verdict'], stage: TraceEntry['stage'] = 'output'): TraceEntry => ({
   guardrailId: `gr-${verdict}`,
@@ -120,5 +120,21 @@ describe('readReply', () => {
     expect(agentOnly.usage).toEqual({ inputTokens: 1, outputTokens: 2 })
     expect(agentOnly.trace).toEqual([])
     expect(agentOnly.limits).toEqual([])
+  })
+
+  it('never shows a failed or canceled task as passed', () => {
+    const task = (state: 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED'): SendMessageResponse => ({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        task: { id: 't', status: { state, message: { messageId: 's', role: 'ROLE_AGENT', parts: [{ text: 'Could not finish.' }] } } },
+      },
+    })
+    expect(readReply(task('TASK_STATE_FAILED'), 'x')).toMatchObject({
+      verdict: 'error',
+      text: 'Could not finish.',
+      errorMessage: TASK_FAILED,
+    })
+    expect(readReply(task('TASK_STATE_CANCELED'), 'x')).toMatchObject({ verdict: 'error', errorMessage: TASK_CANCELED })
   })
 })

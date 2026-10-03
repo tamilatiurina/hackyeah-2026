@@ -114,4 +114,14 @@ describe('Test chat', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Test chat' })).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/test')
   })
+
+  it('announces the reply to screen readers', async () => {
+    const user = await open()
+    const live = document.querySelector('[data-testid="chat-live"]') as HTMLElement
+    expect(live).toHaveAttribute('aria-live', 'polite')
+    await user.click(screen.getByRole('button', { name: '#pii' }))
+    await waitFor(() => expect(live).toHaveTextContent('Reply 1: Redacted. Reach me at [EMAIL] or [PHONE].'))
+    await user.type(screen.getByLabelText('Message'), '#error{Enter}')
+    await waitFor(() => expect(live).toHaveTextContent('Reply 2: Error. Agent error -32603: Internal error'))
+  })
 })

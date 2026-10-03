@@ -102,6 +102,16 @@ export function TestChatPage() {
     }
   }
 
+  // One live region that stays mounted, so screen readers hear each reply (FR-10/11 accessibility).
+  const last = turns[turns.length - 1]
+  const liveText = !last
+    ? ''
+    : last.status === 'pending'
+      ? 'Waiting for the agent'
+      : `Reply ${turns.length}: ${
+          last.status === 'failed' ? VERDICTS.error.label : VERDICTS[last.reply?.verdict ?? 'error'].label
+        }. ${[last.reply?.text, last.failure ?? last.reply?.errorMessage].filter(Boolean).join(' ')}`
+
   const finished = turns.filter((t) => t.reply)
   const selected = turns.find((t) => t.id === selectedTurnId && t.reply) ?? finished[finished.length - 1] ?? null
 
@@ -174,6 +184,10 @@ export function TestChatPage() {
                 />
               ))}
             </ol>
+
+            <p data-testid="chat-live" aria-live="polite" className="sr-only">
+              {liveText}
+            </p>
 
             {endpointMissing && (
               <p role="alert" className="m-0 rounded-lg bg-warn-bg p-3 text-sm text-warn-fg">
@@ -255,9 +269,8 @@ function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled, ag
       </li>
       <li className="flex justify-start">
         {turn.status === 'pending' ? (
-          <p aria-live="polite" className="m-0 rounded-xl bg-canvas px-3 py-2 text-sm text-muted">
+          <p className="m-0 rounded-xl bg-canvas px-3 py-2 text-sm text-muted">
             <span aria-hidden="true">…</span>
-            <span className="sr-only">Waiting for the agent</span>
           </p>
         ) : (
           <article
