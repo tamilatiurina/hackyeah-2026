@@ -1,8 +1,10 @@
 import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
+import { RequireAuth } from '../auth/RequireAuth'
 import { AgentsPage } from '../pages/agents/AgentsPage'
 import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
 import { Placeholder } from '../pages/Placeholder'
+import { SignInPage } from '../pages/SignInPage'
 import { Layout } from './Layout'
 import { homeFor, navItemsFor } from './nav'
 import { useRole } from './role'
@@ -18,7 +20,14 @@ export function AppRoutes() {
 
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route path="/sign-in" element={<SignInPage />} />
+      <Route
+        element={
+          <RequireAuth>
+            <Layout />
+          </RequireAuth>
+        }
+      >
         {navItemsFor(role).map((item) => (
           <Route
             key={item.path}

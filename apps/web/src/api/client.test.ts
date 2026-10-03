@@ -1,7 +1,16 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '../test/server'
-import { ApiError, apiPath, deleteJson, getJson, patchJson, postJson } from './client'
+import {
+  ApiError,
+  apiPath,
+  deleteJson,
+  getJson,
+  patchJson,
+  postJson,
+  setAccessTokenProvider,
+  setUnauthorizedHandler,
+} from './client'
 
 describe('api client', () => {
   it('sends requests under /api/v1, where FastAPI mounts its routes', async () => {
@@ -118,5 +127,28 @@ describe('api client', () => {
     await expect(patchJson('/thing', { enabled: false }, { 'X-Role': 'admin' })).resolves.toEqual({ enabled: false })
     await expect(deleteJson('/thing', { 'X-Role': 'admin' })).resolves.toBeUndefined()
     expect(seen).toEqual(['PATCH admin', 'DELETE admin'])
+  })
+
+  it('adds the bearer token from the provider', async () => {
+    let auth: string | null = null
+    server.use(
+      http.get(apiPath('/whoami'), ({ request }) => {
+        auth = request.headers.get('Authorization')
+        return HttpResponse.json({ ok: true })
+      }),
+    )
+    setAccessTokenProvider(() => 'abc')
+    await getJson('/whoami')
+    expect(auth).toBe('Bearer abc')
+  })
+
+  it('calls the unauthorized handler on 401', async () => {
+    let called = 0
+    server.use(http.get(apiPath('/private'), () => HttpResponse.json({ detail: 'nope' }, { status: 401 })))
+    setUnauthorizedHandler(() => {
+      called += 1
+    })
+    await expect(getJson('/private')).rejects.toMatchObject({ status: 401 })
+    expect(called).toBe(1)
   })
 })

@@ -52,12 +52,28 @@ function errorFrom(status: number, data: unknown): ApiError {
 
 type ExtraHeaders = Record<string, string>
 
+let accessTokenProvider: () => string | null = () => null
+let unauthorizedHandler: (() => void) | null = null
+
+/** The auth layer supplies the current Supabase access token. */
+export function setAccessTokenProvider(provider: () => string | null): void {
+  accessTokenProvider = provider
+}
+
+/** Called on any 401 (e.g. an expired session). */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // Resolve against the page origin so relative paths also work under Node's fetch in tests.
   const url = new URL(apiPath(path), window.location.origin)
   let response: Response
   try {
-    response = await fetch(url, init)
+    const headers = new Headers(init.headers)
+    const token = accessTokenProvider()
+    if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`)
+    response = await fetch(url, { ...init, headers })
   } catch {
     throw new ApiError(0, 'Network error: could not reach the server')
   }
@@ -65,6 +81,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const text = await response.text()
   const data = text ? parseJson(text) : null
 
+  if (response.status === 401) unauthorizedHandler?.()
   if (!response.ok) throw errorFrom(response.status, data)
   // e.g. index.html served for /api by the SPA rewrite when the real API is missing
   if (data === undefined) throw new ApiError(response.status, 'Unexpected response from the server')
