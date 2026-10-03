@@ -4,7 +4,9 @@ from pathlib import Path
 from app.seeds import seed_signatures
 
 # CI never has the gitignored live policy, so this reads the tracked seed policy.
-POLICY = Path(__file__).resolve().parents[3] / "packages" / "pi-control-layer" / "policy.json.example"  # noqa: E501
+POLICY = (
+    Path(__file__).resolve().parents[3] / "packages" / "pi-control-layer" / "policy.json.example"
+)  # noqa: E501
 
 
 def test_signature_seeds_match_policy_json() -> None:
