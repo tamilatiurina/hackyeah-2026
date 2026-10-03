@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { AuthProvider } from '../auth/AuthProvider'
 import { createFakeAuth } from '../test/fakeAuth'
 import { describe, expect, it } from 'vitest'
+import { ModeProvider } from './ModeProvider'
 import { RoleProvider } from './RoleProvider'
 import { Sidebar } from './Sidebar'
 
@@ -13,7 +14,9 @@ function renderSidebar(counts?: Partial<Record<string, number>>) {
       <MemoryRouter initialEntries={['/sessions']}>
         <AuthProvider client={createFakeAuth()} initialSession={createFakeAuth().session}>
           <RoleProvider>
-            <Sidebar id="sb" open={false} onNavigate={() => {}} counts={counts} />
+            <ModeProvider>
+              <Sidebar id="sb" open={false} onNavigate={() => {}} counts={counts} />
+            </ModeProvider>
           </RoleProvider>
         </AuthProvider>
       </MemoryRouter>

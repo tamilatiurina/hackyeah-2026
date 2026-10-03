@@ -1,10 +1,6 @@
 {
   "version": 1,
   "defaults": {
-    "identity": {
-      "agentName": "dev-agent",
-      "owner": "team-alpha"
-    },
     "commands": {
       "banned": [
         {
@@ -179,37 +175,11 @@
     }
   },
   "agents": {
-    "demo-agent": {
-      "identity": {
-        "agentName": "demo-agent",
-        "owner": "demo-team"
-      },
+    "amir": {
       "budget": {
         "maxSessionCostUsd": 0.5,
         "maxTurnCostUsd": 0.1,
         "onExceed": "block"
-      }
-    },
-    "readonly-agent": {
-      "identity": {
-        "agentName": "readonly-agent",
-        "owner": "demo-team"
-      },
-      "commands": {
-        "banned": [
-          {
-            "id": "ban-all-writes",
-            "pattern": "*>*",
-            "reason": "Read-only agent: output redirection is not allowed",
-            "enabled": true
-          },
-          {
-            "id": "ban-teecommand",
-            "pattern": "tee *",
-            "reason": "Read-only agent: file writes via tee are not allowed",
-            "enabled": true
-          }
-        ]
       }
     }
   }

@@ -14,7 +14,7 @@ from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
 from app.bindings.models import Binding, ScopeType
-from app.core.supabase import get_supabase_for_user
+from app.core.supabase import get_supabase, get_supabase_for_user
 from app.guardrails.repository import supabase_configured
 from app.store import store
 from supabase import Client
@@ -185,6 +185,13 @@ class SupabaseBindingRepository:
         self._run(
             lambda: self._client.table(TABLE).delete().eq("guardrail_id", guardrail_id).execute()
         )
+
+
+def get_binding_repository_for_gateway() -> BindingRepository:
+    """Bindings as the gateway sees them: no user token, so the service role reads them."""
+    if not supabase_configured():
+        return InMemoryBindingRepository()
+    return SupabaseBindingRepository(get_supabase())
 
 
 def get_binding_repository(

@@ -28,7 +28,13 @@ import type {
 import { TEST_TOKEN } from './fakeAuth'
 
 export const FAKE_TEMPLATES: GuardrailTemplate[] = [
-  { id: 'pii', label: 'PII', engines: ['library', 'regex'], actions: ['block', 'redact', 'warn'] },
+  {
+    id: 'pii',
+    label: 'PII',
+    engines: ['library'],
+    actions: ['block', 'redact', 'warn'],
+    entities: ['EMAIL', 'PHONE', 'CREDIT_CARD', 'IBAN'],
+  },
   { id: 'prompt_injection', label: 'Prompt injection', engines: ['regex', 'llm_judge'], actions: ['block', 'warn'] },
   { id: 'toxicity', label: 'Toxicity', engines: ['moderation', 'llm_judge'], actions: ['block', 'warn'] },
   { id: 'topic', label: 'Topic allow/deny list', engines: ['llm_judge'], actions: ['block', 'warn'] },

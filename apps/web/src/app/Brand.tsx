@@ -1,4 +1,8 @@
-export function Brand() {
+interface BrandProps {
+  subtitle?: string
+}
+
+export function Brand({ subtitle = 'Acme workspace' }: BrandProps) {
   return (
     <div className="flex items-center gap-2.5 px-2">
       <svg
@@ -18,7 +22,7 @@ export function Brand() {
       </svg>
       <div className="flex flex-col">
         <span className="text-base font-bold text-white">Guardrail Hub</span>
-        <span className="text-xs text-sidebar-subtle">Acme workspace</span>
+        <span className="text-xs text-sidebar-subtle">{subtitle}</span>
       </div>
     </div>
   )

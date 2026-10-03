@@ -333,7 +333,7 @@ def test_output_redaction_with_the_real_pii_guardrail() -> None:
         {
             "id": "pii",
             "name": "PII",
-            "engine": "regex",
+            "engine": "library",  # PII runs on the library engine only (#103)
             "stages": ["output"],
             "action": "redact",
             "config": {"template": "pii"},
@@ -348,7 +348,7 @@ def test_output_redaction_with_the_real_pii_guardrail() -> None:
     assert "[EMAIL]" in text
     [entry] = message["metadata"]["guardrailHub"]["trace"]
     assert entry["verdict"] == "redact"
-    assert entry["engine"] == "regex"
+    assert entry["engine"] == "library"
 
 
 def test_output_redaction_covers_task_artifacts() -> None:

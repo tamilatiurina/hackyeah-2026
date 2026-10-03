@@ -2,7 +2,14 @@ import type { Reply, TraceEntry } from '../../api/a2a'
 import { badgeClass } from '../../ui/classes'
 
 const STAGES: Record<TraceEntry['stage'], string> = { input: 'Input', output: 'Output' }
-const VERDICTS: Record<TraceEntry['verdict'], string> = { pass: 'Pass', block: 'Block', redact: 'Redact', warn: 'Warn' }
+const VERDICTS: Record<TraceEntry['verdict'], string> = {
+  pass: 'Pass',
+  block: 'Block',
+  redact: 'Redact',
+  warn: 'Warn',
+  skipped: 'Skipped',
+  error: 'Error',
+}
 const cell = 'px-2 py-1.5 align-top'
 
 /** FR-11: what the guardrails did for one reply, plus usage and limits. */

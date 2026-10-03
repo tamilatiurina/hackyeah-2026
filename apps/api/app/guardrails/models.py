@@ -7,6 +7,8 @@ Engine = Literal["regex", "llm_judge", "library", "moderation"]
 Stage = Literal["input", "output"]
 Action = Literal["block", "redact", "warn"]
 TemplateId = Literal["pii", "prompt_injection", "toxicity", "topic", "regex", "llm_judge"]
+PiiEntity = Literal["EMAIL", "PHONE", "CREDIT_CARD", "IBAN"]
+PII_ENTITIES: tuple[PiiEntity, ...] = ("EMAIL", "PHONE", "CREDIT_CARD", "IBAN")
 
 
 def _must_compile(pattern: str) -> str:
@@ -20,7 +22,7 @@ def _must_compile(pattern: str) -> str:
 # --- per-template config (the discriminator is "template") ---
 class PiiConfig(BaseModel):
     template: Literal["pii"]
-    entities: list[str] = Field(default=["EMAIL", "PHONE", "CREDIT_CARD", "IBAN"], min_length=1)
+    entities: list[PiiEntity] = Field(default=list(PII_ENTITIES), min_length=1)
 
 
 class PromptInjectionConfig(BaseModel):
@@ -67,13 +69,19 @@ class TemplateInfo(BaseModel):
     label: str
     engines: list[Engine]
     actions: list[Action]
+    # Detectors the template can name in config. Absent unless the template has a closed set.
+    entities: list[PiiEntity] | None = None
 
 
 TEMPLATES: dict[str, TemplateInfo] = {
     t.id: t
     for t in [
         TemplateInfo(
-            id="pii", label="PII", engines=["library", "regex"], actions=["block", "redact", "warn"]
+            id="pii",
+            label="PII",
+            engines=["library"],
+            actions=["block", "redact", "warn"],
+            entities=list(PII_ENTITIES),
         ),
         TemplateInfo(
             id="prompt_injection",

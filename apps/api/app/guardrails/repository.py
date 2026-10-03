@@ -18,7 +18,7 @@ from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
 from app.core.config import settings
-from app.core.supabase import get_supabase_for_user
+from app.core.supabase import get_supabase, get_supabase_for_user
 from app.guardrails.models import Guardrail
 from app.store import store
 from supabase import Client
@@ -136,6 +136,17 @@ class SupabaseGuardrailRepository:
 
 def supabase_configured() -> bool:
     return bool(settings.SUPABASE_URL and settings.SUPABASE_KEY)
+
+
+def get_guardrail_repository_for_gateway() -> GuardrailRepository:
+    """The library as the gateway sees it: no user token, so the service role reads it.
+
+    A gateway call authenticates with the deployment's X-API-Key, not a signed-in user, so it
+    cannot go through RLS the way the panel does. Same client as app.gateway.resolver.
+    """
+    if not supabase_configured():
+        return InMemoryGuardrailRepository()
+    return SupabaseGuardrailRepository(get_supabase())
 
 
 def get_guardrail_repository(

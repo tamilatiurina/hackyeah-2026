@@ -32,7 +32,8 @@ def create(**overrides: Any) -> httpx.Response:
 
 def test_templates_list_their_engines() -> None:
     templates = {t["id"]: t for t in client.get(f"{BASE}/guardrail-templates").json()}
-    assert templates["pii"]["engines"] == ["library", "regex"]
+    assert templates["pii"]["engines"] == ["library"]
+    assert templates["pii"]["entities"] == ["EMAIL", "PHONE", "CREDIT_CARD", "IBAN"]
     assert templates["toxicity"]["engines"] == ["moderation", "llm_judge"]
     assert templates["topic"]["engines"] == ["llm_judge"]
     assert "engine" not in templates["pii"]
@@ -99,11 +100,14 @@ def test_get_one_and_unknown() -> None:
 
 
 def test_patch_changes_only_the_fields_sent() -> None:
-    r = client.patch(f"{BASE}/guardrails/gr-pii", json={"enabled": False})
+    admin = {"X-Role": "admin"}
+    r = client.patch(f"{BASE}/guardrails/gr-pii", json={"enabled": False}, headers=admin)
     assert r.status_code == 200
     assert r.json()["enabled"] is False
     assert r.json()["name"] == "PII redaction"
-    cleared = client.patch(f"{BASE}/guardrails/gr-pii", json={"description": None}).json()
+    cleared = client.patch(
+        f"{BASE}/guardrails/gr-pii", json={"description": None}, headers=admin
+    ).json()
     assert cleared["description"] is None
     assert cleared["enabled"] is False
 
@@ -119,7 +123,8 @@ def test_patch_unknown_is_404() -> None:
 
 
 def test_delete_then_gone() -> None:
-    assert client.delete(f"{BASE}/guardrails/gr-pii").status_code == 204
+    admin = {"X-Role": "admin"}
+    assert client.delete(f"{BASE}/guardrails/gr-pii", headers=admin).status_code == 204
     assert client.get(f"{BASE}/guardrails/gr-pii").status_code == 404
     assert client.delete(f"{BASE}/guardrails/gr-pii").status_code == 404
 

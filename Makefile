@@ -1,4 +1,4 @@
-.PHONY: install api web cli test-agent lint test supabase supabase-stop
+.PHONY: install api web cli test-agent lint test supabase supabase-stop seed-sandbox
 
 SUPABASE = pnpm dlx supabase@2.119.0
 
@@ -17,6 +17,9 @@ cli:
 
 test-agent:
 	uv run acme-test-agent
+
+seed-sandbox:
+	cd apps/api && uv run python -m app.pi_policy.playground
 
 lint:
 	uv run ruff check . && uv run ruff format --check . && uv run mypy apps/cli packages

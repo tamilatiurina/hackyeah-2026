@@ -37,3 +37,23 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
       - run: pnpm test
+  # Apply new Supabase migrations to the hosted project, only from main and only after the
+  # Python and API tests pass. `db push` applies just the migrations the database hasn't seen,
+  # so a push with no new migration does nothing.
+  # Needs repository secrets: SUPABASE_ACCESS_TOKEN (personal access token),
+  # SUPABASE_PROJECT_ID (project ref) and SUPABASE_DB_PASSWORD (database password).
+  migrate:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: python
+    runs-on: ubuntu-latest
+    concurrency: { group: supabase-migrations, cancel-in-progress: false }
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with: { version: 2.119.0 } # same CLI as `make supabase`
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD" --workdir apps/api
+      - run: supabase db push --password "$SUPABASE_DB_PASSWORD" --workdir apps/api

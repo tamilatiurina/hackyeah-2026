@@ -37,6 +37,10 @@ function errorFrom(status: number, data: unknown): ApiError {
     return new ApiError(status, body.message, typeof body.field === 'string' ? body.field : undefined)
   }
   if (typeof body.detail === 'string') return new ApiError(status, body.detail)
+  if (typeof body.detail === 'object' && body.detail !== null && 'message' in body.detail) {
+    const detail = body.detail as { message?: unknown; errors?: unknown }
+    if (typeof detail.message === 'string') return new ApiError(status, detail.message)
+  }
   if (Array.isArray(body.detail) && body.detail.length > 0) {
     const first = body.detail[0] as { msg?: unknown; loc?: unknown }
     if (typeof first.msg === 'string') {
@@ -107,6 +111,10 @@ export function getJson<T>(path: string, headers: ExtraHeaders = {}): Promise<T>
 
 export function postJson<T>(path: string, body: unknown, headers: ExtraHeaders = {}): Promise<T> {
   return request<T>(path, jsonInit('POST', body, headers))
+}
+
+export function putJson<T>(path: string, body: unknown, headers: ExtraHeaders = {}): Promise<T> {
+  return request<T>(path, jsonInit('PUT', body, headers))
 }
 
 export function patchJson<T>(path: string, body: unknown, headers: ExtraHeaders = {}): Promise<T> {

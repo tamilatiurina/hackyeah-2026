@@ -22,6 +22,7 @@ def seed_guardrails() -> list[Guardrail]:
             stages=["output"],
             action="redact",
             config=PiiConfig(template="pii"),
+            is_mandatory=True,
         ),
         Guardrail(
             id="gr-injection",
@@ -31,6 +32,7 @@ def seed_guardrails() -> list[Guardrail]:
             stages=["input"],
             action="block",
             config=PromptInjectionConfig(template="prompt_injection"),
+            is_mandatory=True,
         ),
         Guardrail(
             id="gr-toxicity",

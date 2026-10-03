@@ -8,6 +8,7 @@ import type {
   GuardrailAction,
   GuardrailConfig,
   GuardrailTemplate,
+  PiiEntity,
   Stage,
   TemplateId,
 } from '../../api/types'
@@ -23,7 +24,7 @@ interface NewGuardrailFormProps {
 type StageChoice = 'input' | 'output' | 'both'
 type FieldErrors = Partial<Record<'name' | 'entities' | 'topics' | 'pattern' | 'prompt', string>>
 
-const PII_ENTITIES = [
+const PII_ENTITIES: ReadonlyArray<{ id: PiiEntity; label: string }> = [
   { id: 'EMAIL', label: 'Email' },
   { id: 'PHONE', label: 'Phone' },
   { id: 'CREDIT_CARD', label: 'Credit card' },
@@ -66,7 +67,7 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
   const [description, setDescription] = useState('')
   const [stage, setStage] = useState<StageChoice>('input')
   const [action, setAction] = useState<GuardrailAction>('block')
-  const [entities, setEntities] = useState<string[]>(PII_ENTITIES.map((e) => e.id))
+  const [entities, setEntities] = useState<PiiEntity[]>(PII_ENTITIES.map((e) => e.id))
   const [threshold, setThreshold] = useState('0.7')
   const [topicMode, setTopicMode] = useState<'allow' | 'deny'>('allow')
   const [topics, setTopics] = useState('')

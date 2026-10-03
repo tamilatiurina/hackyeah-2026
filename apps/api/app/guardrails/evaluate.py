@@ -10,6 +10,7 @@ from collections.abc import Sequence
 import regex
 
 from app.guardrails.models import (
+    PII_ENTITIES,
     DryRunResult,
     GuardrailRule,
     InjectionSignature,
@@ -96,9 +97,8 @@ def _pii(config: PiiConfig, text: str) -> tuple[list[str], str]:
         count, redacted = _redact_entity(entity, redacted)
         if count:
             found.append(entity)
-    # Report in the user's reading order of the default list, not the redaction order.
-    order = ["EMAIL", "PHONE", "CREDIT_CARD", "IBAN"]
-    found.sort(key=order.index)
+    # Report in the catalog's reading order, not the redaction order.
+    found.sort(key=PII_ENTITIES.index)
     return found, redacted
 
 
@@ -121,12 +121,16 @@ def evaluate(
             reason = f"Found {', '.join(found)}"
             redacted = pii_redacted
     elif isinstance(config, PromptInjectionConfig):
-        ids = [s.id for s in signatures if _search(s.regex, text)]
+        active = signatures if config.use_company_signatures else ()
+        ids = [s.id for s in active if _search(s.regex, text)]
         if ids:
             reason = f"Matched injection signature: {', '.join(ids)}"
     elif isinstance(config, ToxicityConfig):
         words = [w for w in TOXIC_WORDS if w in lowered]
-        if words:
+        # Keyword heuristic is binary (hit = 1.0). The threshold is read so a stored value is
+        # not decorative; a real moderation model will put a proper score here later.
+        score = 1.0 if words else 0.0
+        if words and score >= config.threshold:
             reason = f"Abusive language: {', '.join(words)}"
     elif isinstance(config, TopicConfig):
         present = [t for t in config.topics if t.lower() in lowered]
