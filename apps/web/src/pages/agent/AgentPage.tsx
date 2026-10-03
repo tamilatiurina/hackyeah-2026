@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { useAgent, useDeleteAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
+import { AgentGuardrails } from './AgentGuardrails'
 import { AgentOverview } from './AgentOverview'
 import { EditAgentForm } from './EditAgentForm'
 
@@ -104,6 +105,7 @@ export function AgentPage() {
       ) : (
         <AgentOverview agent={agent.data} />
       )}
+      <AgentGuardrails agent={agent.data} />
     </section>
   )
 }
