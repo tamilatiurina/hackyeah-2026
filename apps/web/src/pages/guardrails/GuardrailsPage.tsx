@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useGuardrailTemplates, useGuardrails } from '../../api/guardrails'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { GuardrailCard } from './GuardrailCard'
+import { NewGuardrailForm } from './NewGuardrailForm'
 
 export function GuardrailsPage() {
   const templates = useGuardrailTemplates()
@@ -86,6 +87,13 @@ export function GuardrailsPage() {
           </button>
         )}
       </header>
+      {creating && templates.data && (
+        <NewGuardrailForm
+          templates={templates.data}
+          onClose={() => setCreating(false)}
+          onCreated={(guardrail) => setHighlightId(guardrail.id)}
+        />
+      )}
       {content}
     </section>
   )
