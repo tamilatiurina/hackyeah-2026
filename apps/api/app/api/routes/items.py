@@ -6,7 +6,7 @@ router = APIRouter(prefix="/items", tags=["items"])
 
 
 @router.get("/")
-def read_items(timestamp: str = Depends(get_timestamp)):
+def read_items(timestamp: str = Depends(get_timestamp)) -> dict[str, object]:
     return {
         "data": [
             {"id": 1, "name": "Sample Item 1", "value": 100},
@@ -19,7 +19,7 @@ def read_items(timestamp: str = Depends(get_timestamp)):
 
 
 @router.get("/{item_id}")
-def read_item(item_id: int, timestamp: str = Depends(get_timestamp)):
+def read_item(item_id: int, timestamp: str = Depends(get_timestamp)) -> dict[str, object]:
     return {
         "item": {
             "id": item_id,

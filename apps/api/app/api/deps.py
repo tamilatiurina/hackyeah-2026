@@ -2,9 +2,9 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Header, HTTPException, status
-from supabase import Client
 
 from app.core.supabase import get_supabase as _get_supabase
+from supabase import Client
 
 
 def get_timestamp() -> str:
