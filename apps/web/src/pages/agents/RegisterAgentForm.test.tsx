@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { fakeApi } from '../../test/fakeApi'
+import { cardUnreachable, fakeApi } from '../../test/fakeApi'
 import { renderApp } from '../../test/renderApp'
 
 async function openForm() {
@@ -13,7 +13,7 @@ async function openForm() {
 
 async function fill(user: ReturnType<typeof userEvent.setup>, name: string, url: string) {
   await user.type(screen.getByLabelText('Name'), name)
-  await user.type(screen.getByLabelText('Upstream URL'), url)
+  await user.type(screen.getByLabelText('Agent URL'), url)
 }
 
 describe('Register agent', () => {
@@ -24,22 +24,29 @@ describe('Register agent', () => {
 
   it('registers an agent, closes, highlights the row and returns focus', async () => {
     const user = await openForm()
-    await fill(user, 'Billing Bot', 'https://billing.example/chat')
+    await fill(user, 'Billing Bot', 'https://billing.example')
     await user.type(screen.getByLabelText('Description'), 'Answers invoices')
-    await user.selectOptions(screen.getByLabelText('Response format'), 'Text')
+    expect(screen.queryByLabelText('Request format')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Register' }))
     const row = (await screen.findByRole('link', { name: 'Billing Bot' })).closest('tr') as HTMLElement
     expect(row).toHaveAttribute('data-highlight', 'true')
-    expect(within(row).getByText('JSON → Text')).toBeInTheDocument()
+    expect(within(row).getByText('v1.0.0 · 1 skill')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Register agent' })).toHaveFocus())
     expect(fakeApi.lastAgentRegistration).toEqual({
       name: 'Billing Bot',
       description: 'Answers invoices',
-      upstream_url: 'https://billing.example/chat',
+      base_url: 'https://billing.example',
       auth_header: null,
-      request_format: 'json',
-      response_format: 'text',
     })
+  })
+
+  it('leaves a blank description to the Agent Card', async () => {
+    const user = await openForm()
+    await fill(user, 'Billing Bot', 'https://billing.example')
+    await user.click(screen.getByRole('button', { name: 'Register' }))
+    const row = (await screen.findByRole('link', { name: 'Billing Bot' })).closest('tr') as HTMLElement
+    expect(within(row).getByText('Billing Bot (from its Agent Card).')).toBeInTheDocument()
+    expect(fakeApi.lastAgentRegistration).not.toHaveProperty('description')
   })
 
   it('sends an auth header when asked, without showing its value afterwards', async () => {
@@ -63,7 +70,7 @@ describe('Register agent', () => {
     await user.clear(screen.getByLabelText('Header name'))
     await user.click(screen.getByRole('button', { name: 'Register' }))
     expect(screen.getByText('Name is required')).toBeInTheDocument()
-    expect(screen.getByText('Upstream URL is required')).toBeInTheDocument()
+    expect(screen.getByText('Agent URL is required')).toBeInTheDocument()
     expect(screen.getByText('Header name is required')).toBeInTheDocument()
     expect(screen.getByText('Header value is required')).toBeInTheDocument()
     expect(fakeApi.lastAgentRegistration).toBeNull()
@@ -77,13 +84,11 @@ describe('Register agent', () => {
     expect(screen.getByLabelText('Name')).toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('explains an unreachable upstream', async () => {
+  it('explains why the Agent Card could not be read', async () => {
     const user = await openForm()
-    await fill(user, 'Billing Bot', 'https://billing.unreachable.example/chat')
+    await fill(user, 'Billing Bot', 'https://billing.unreachable.example')
     await user.click(screen.getByRole('button', { name: 'Register' }))
-    expect(
-      await screen.findByText("Couldn't reach the upstream agent. Check the URL and that it answers GET requests."),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(cardUnreachable('https://billing.unreachable.example'))).toBeInTheDocument()
     expect(screen.getByLabelText('Name')).toBeInTheDocument()
   })
 

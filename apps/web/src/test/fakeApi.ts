@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { apiPath } from '../api/client'
 import type {
   Agent,
+  AgentCard,
   AgentRegistration,
   AgentUpdate,
   DryRunRequest,
@@ -69,16 +70,27 @@ function seedSignatures(): InjectionSignature[] {
   ]
 }
 
+/** A2A 1.0 Agent Card as the fake agent at `baseUrl` would serve it. */
+export function fakeAgentCard(name: string, baseUrl: string): AgentCard {
+  return {
+    name,
+    description: `${name} (from its Agent Card).`,
+    version: '1.0.0',
+    supportedInterfaces: [{ url: `${baseUrl.replace(/\/$/, '')}/a2a`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }],
+    skills: [{ id: 'orders', name: 'Orders and returns', description: 'Order status.', tags: ['support'] }],
+  }
+}
+
 function seedAgents(): Agent[] {
   return [
     {
       id: 'agent-support',
       name: 'Support Assistant',
       description: 'Answers order questions.',
-      upstream_url: 'https://support-agent.acme.example/api/chat',
+      base_url: 'https://support-agent.acme.example',
+      upstream_url: 'https://support-agent.acme.example/a2a',
       auth_header_name: 'Authorization',
-      request_format: 'json',
-      response_format: 'json',
+      agent_card: fakeAgentCard('Support Assistant', 'https://support-agent.acme.example'),
       config_version: 1,
       attached_rules: [{ rule_id: 'gr-pii', rule_type: 'guardrail', order_index: 0 }],
     },
@@ -86,10 +98,11 @@ function seedAgents(): Agent[] {
       id: 'agent-contracts',
       name: 'Contract Summarizer',
       description: '',
+      // Registered before A2A: no Agent Card.
+      base_url: 'https://legal-ai.acme.example/summarize',
       upstream_url: 'https://legal-ai.acme.example/summarize',
       auth_header_name: null,
-      request_format: 'text',
-      response_format: 'text',
+      agent_card: null,
       config_version: 1,
       attached_rules: [],
     },
@@ -107,6 +120,9 @@ function present(agent: Agent): Agent {
 }
 
 const methodNotAllowed = () => detail(405, 'Method Not Allowed')
+
+export const cardUnreachable = (baseUrl: string) =>
+  `Could not fetch the agent's A2A Agent Card from ${baseUrl.replace(/\/$/, '')}/.well-known/agent-card.json`
 
 export const fakeApi: {
   guardrails: Guardrail[]
@@ -247,27 +263,27 @@ export const fakeApiHandlers = [
     if (!signedIn(request)) return notAuthenticated()
     const body = (await request.json()) as AgentRegistration
     fakeApi.lastAgentRegistration = body
-    if (!body.name?.trim() || body.name.length > 100) {
+    if (body.name !== undefined && (!body.name.trim() || body.name.length > 100)) {
       return validation('String should have at most 100 characters', ['body', 'name'])
     }
-    if (!/^https?:\/\//.test(body.upstream_url ?? '')) {
-      return validation('Input should be a valid URL', ['body', 'upstream_url'])
+    if (!/^https?:\/\//.test(body.base_url ?? '')) {
+      return validation('Input should be a valid URL', ['body', 'base_url'])
     }
     if (body.auth_header && !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(body.auth_header.name)) {
       return validation('auth header name is not a valid HTTP header name', ['body', 'auth_header', 'name'])
     }
-    if (fakeApi.agents.some((a) => a.name === body.name)) return detail(409, 'An agent with this name already exists')
-    if (new URL(body.upstream_url).hostname.includes('unreachable')) {
-      return detail(502, 'Upstream agent did not respond successfully')
-    }
+    const card = fakeAgentCard(body.name ?? 'Card Agent', body.base_url)
+    const name = body.name ?? card.name
+    if (fakeApi.agents.some((a) => a.name === name)) return detail(409, 'An agent with this name already exists')
+    if (new URL(body.base_url).hostname.includes('unreachable')) return detail(502, cardUnreachable(body.base_url))
     const agent: Agent = {
       id: `agent-new-${fakeApi.agentId++}`,
-      name: body.name,
-      description: body.description,
-      upstream_url: body.upstream_url,
+      name,
+      description: body.description ?? card.description,
+      base_url: body.base_url,
+      upstream_url: card.supportedInterfaces[0].url,
       auth_header_name: body.auth_header?.name ?? null,
-      request_format: body.request_format,
-      response_format: body.response_format,
+      agent_card: card,
       config_version: 1,
       attached_rules: [],
     }
@@ -292,8 +308,8 @@ export const fakeApiHandlers = [
     if (body.name !== undefined && fakeApi.agents.some((a) => a.id !== current.id && a.name === body.name)) {
       return detail(409, 'An agent with this name already exists')
     }
-    if (body.upstream_url !== undefined && new URL(body.upstream_url).hostname.includes('unreachable')) {
-      return detail(502, 'Upstream agent did not respond successfully')
+    if (body.base_url !== undefined && new URL(body.base_url).hostname.includes('unreachable')) {
+      return detail(502, cardUnreachable(body.base_url))
     }
     const { auth_header, attached_rules, ...fields } = body
     const updated: Agent = {

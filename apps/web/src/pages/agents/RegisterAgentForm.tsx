@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useRegisterAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
-import type { Agent, MessageFormat } from '../../api/types'
+import type { Agent } from '../../api/types'
 import {
   hasErrors,
   validateAgentForm,
@@ -10,7 +10,7 @@ import {
   type AgentFormField,
 } from '../../api/validation'
 import { buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
-import { AgentFields, Field, UNREACHABLE, type AgentFieldValues } from './AgentFields'
+import { AgentFields, Field, type AgentFieldValues } from './AgentFields'
 
 interface RegisterAgentFormProps {
   onClose: () => void
@@ -24,13 +24,11 @@ export function RegisterAgentForm({ onClose, onRegistered }: RegisterAgentFormPr
   const [form, setForm] = useState<AgentForm>({
     name: '',
     description: '',
-    upstreamUrl: '',
+    baseUrl: '',
     sendAuthHeader: false,
     authHeaderName: 'Authorization',
     authHeaderValue: '',
   })
-  const [requestFormat, setRequestFormat] = useState<MessageFormat>('json')
-  const [responseFormat, setResponseFormat] = useState<MessageFormat>('json')
   const [errors, setErrors] = useState<AgentFormErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const register = useRegisterAgent()
@@ -55,13 +53,12 @@ export function RegisterAgentForm({ onClose, onRegistered }: RegisterAgentFormPr
     register.mutate(
       {
         name: form.name.trim(),
-        description: form.description,
-        upstream_url: form.upstreamUrl.trim(),
+        // Left blank, the API takes the description from the Agent Card.
+        ...(form.description.trim() ? { description: form.description } : {}),
+        base_url: form.baseUrl.trim(),
         auth_header: form.sendAuthHeader
           ? { name: form.authHeaderName.trim(), value: form.authHeaderValue }
           : null,
-        request_format: requestFormat,
-        response_format: responseFormat,
       },
       {
         onSuccess: (agent) => {
@@ -70,9 +67,10 @@ export function RegisterAgentForm({ onClose, onRegistered }: RegisterAgentFormPr
         },
         onError: (error) => {
           if (error instanceof ApiError && error.status === 409) setErrors({ name: error.message })
-          else if (error instanceof ApiError && error.status === 502) setFormError(UNREACHABLE)
-          else if (error instanceof ApiError && error.status === 422 && error.field === 'upstream_url') {
-            setErrors({ upstreamUrl: error.message })
+          // 502: the Agent Card couldn't be fetched or isn't a usable A2A 1.0 card; the API says why.
+          else if (error instanceof ApiError && error.status === 502) setFormError(error.message)
+          else if (error instanceof ApiError && error.status === 422 && error.field === 'base_url') {
+            setErrors({ baseUrl: error.message })
           } else setFormError(error.message) // includes auth_header.* 422s: never shown as a Name error
         },
       },
@@ -95,17 +93,11 @@ export function RegisterAgentForm({ onClose, onRegistered }: RegisterAgentFormPr
         values={{
           name: form.name,
           description: form.description,
-          upstreamUrl: form.upstreamUrl,
-          requestFormat,
-          responseFormat,
+          baseUrl: form.baseUrl,
         }}
         errors={errors}
         nameRef={nameRef}
-        onChange={(field: keyof AgentFieldValues, value) => {
-          if (field === 'requestFormat') setRequestFormat(value as MessageFormat)
-          else if (field === 'responseFormat') setResponseFormat(value as MessageFormat)
-          else set(field, value)
-        }}
+        onChange={(field: keyof AgentFieldValues, value) => set(field, value)}
       />
 
       <div className="flex flex-col gap-3">
@@ -157,7 +149,7 @@ export function RegisterAgentForm({ onClose, onRegistered }: RegisterAgentFormPr
           Cancel
         </button>
         <button type="submit" className={buttonPrimary} disabled={register.isPending}>
-          {register.isPending ? 'Checking upstream…' : 'Register'}
+          {register.isPending ? 'Reading Agent Card…' : 'Register'}
         </button>
       </div>
     </form>

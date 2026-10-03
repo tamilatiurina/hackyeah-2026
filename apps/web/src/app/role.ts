@@ -6,12 +6,12 @@ export const ROLES: ReadonlyArray<{ id: Role; label: string; note: string }> = [
   {
     id: 'admin',
     label: 'Admin',
-    note: 'Sets mandatory rules and caps, grants exemptions, and decides any approval.',
+    note: 'Sets mandatory guardrails and caps, and grants exemptions.',
   },
   {
     id: 'dev',
     label: 'Developer',
-    note: 'Member of demo-team. Builds rules and limits, deploys, and decides approvals for demo-team agents.',
+    note: 'Member of demo-team. Registers A2A agents, builds guardrails and limits, and deploys.',
   },
   {
     id: 'tester',
