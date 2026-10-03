@@ -24,3 +24,8 @@ def require_admin(x_role: Annotated[str | None, Header()] = None) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can change injection signatures",
         )
+
+
+def get_role(x_role: Annotated[str | None, Header()] = None) -> str | None:
+    """The caller's role as claimed by the panel (stand-in for real auth, A-08)."""
+    return x_role

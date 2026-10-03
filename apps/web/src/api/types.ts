@@ -82,19 +82,20 @@ export interface GuardrailRule {
 export interface GuardrailCreate extends GuardrailRule {
   name: string
   description: string | null
+  /** FR-06: applies to every agent and cannot be detached. Admin only. */
+  is_mandatory?: boolean
 }
 
 export interface Guardrail extends GuardrailCreate {
   id: string
   enabled: boolean
-  /** FR-06: applies to every agent; never listed in attached_rules. */
-  is_mandatory?: boolean
 }
 
 export interface GuardrailUpdate {
   name?: string
   description?: string | null
   enabled?: boolean
+  is_mandatory?: boolean
 }
 
 export interface DryRunRequest extends GuardrailRule {

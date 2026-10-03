@@ -55,16 +55,29 @@ def list_bindings(
     return bindings
 
 
+def _refuse_if_mandatory(binding: Binding, guardrails: GuardrailRepository, verb: str) -> None:
+    """FR-06: a mandatory guardrail is not an attachment, so it cannot be changed as one."""
+    guardrail = guardrails.get(binding.guardrail_id)
+    if guardrail is not None and guardrail.is_mandatory:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Mandatory guardrails cannot be {verb}")
+
+
 @router.patch("/bindings/{binding_id}")
-def update_binding(binding_id: str, body: BindingUpdate, repo: Bindings) -> Binding:
+def update_binding(
+    binding_id: str, body: BindingUpdate, repo: Bindings, guardrails: Guardrails
+) -> Binding:
     current = _get_or_404(repo, binding_id)
+    _refuse_if_mandatory(current, guardrails, "reordered or paused")
     updated = current.model_copy(update=body.model_dump(exclude_unset=True))
     repo.replace(updated)
     return updated
 
 
 @router.delete("/bindings/{binding_id}", status_code=status.HTTP_204_NO_CONTENT)
-def detach_guardrail(binding_id: str, repo: Bindings) -> Response:
+def detach_guardrail(binding_id: str, repo: Bindings, guardrails: Guardrails) -> Response:
+    current = repo.get(binding_id)
+    if current is not None:
+        _refuse_if_mandatory(current, guardrails, "detached")
     if not repo.delete(binding_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Binding not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -133,15 +133,15 @@ class GuardrailRule(BaseModel):
 class GuardrailCreate(GuardrailRule):
     name: str = Field(min_length=1, max_length=80)
     description: str | None = Field(default=None, max_length=200)
+    is_mandatory: bool = Field(
+        default=False,
+        description="If True, applies to all agents globally and cannot be detached (admin only)",
+    )
 
 
 class Guardrail(GuardrailCreate):
     id: str
     enabled: bool = True
-    is_mandatory: bool = Field(
-        default=False,
-        description="If True, applies to all agents globally and cannot be detached",
-    )
 
 
 class GuardrailUpdate(BaseModel):

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { dryRunGuardrail, useCreateGuardrail } from '../../api/guardrails'
+import { useRole } from '../../app/role'
 import type {
   DryRunResult,
   Engine,
@@ -72,12 +73,14 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
   const [pattern, setPattern] = useState('')
   const [replacement, setReplacement] = useState('[REDACTED]')
   const [prompt, setPrompt] = useState('')
+  const [mandatory, setMandatory] = useState(false)
   const [sample, setSample] = useState('')
   const [dryRun, setDryRun] = useState<DryRunResult | null>(null)
   const [dryRunning, setDryRunning] = useState(false)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const create = useCreateGuardrail()
+  const { role } = useRole()
   const firstEngineRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -175,6 +178,7 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
         stages: STAGES[stage],
         action: effectiveAction,
         config,
+        ...(role === 'admin' && mandatory ? { is_mandatory: true } : {}),
       },
       {
         onSuccess: (guardrail) => {
@@ -412,6 +416,18 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
             className={`${inputClass} py-2`}
           />
         </Field>
+      )}
+
+      {role === 'admin' && (
+        <label className="flex min-h-11 items-start gap-2 text-sm">
+          <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} className="mt-1" />
+          <span>
+            <span className="font-semibold">Mandatory</span>
+            <span className="block text-xs text-muted">
+              Applies to every existing and future agent, runs first, and developers cannot detach it.
+            </span>
+          </span>
+        </label>
       )}
 
       <Field id="ng-sample" label="Try it on sample text">
