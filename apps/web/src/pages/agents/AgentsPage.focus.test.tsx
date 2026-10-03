@@ -5,11 +5,12 @@ import { describe, expect, it } from 'vitest'
 import { db } from '../../mocks/db'
 import { renderApp } from '../../test/renderApp'
 import { server } from '../../test/server'
+import { apiPath } from '../../api/client'
 
 describe('Register agent availability', () => {
   it('offers Register only once agents and groups have loaded', async () => {
     server.use(
-      http.get('/api/groups', async () => {
+      http.get(apiPath('/groups'), async () => {
         await delay(150)
         return HttpResponse.json(db.groups)
       }),
@@ -20,7 +21,7 @@ describe('Register agent availability', () => {
   })
 
   it('hides Register while the list failed to load', async () => {
-    server.use(http.get('/api/agents', () => HttpResponse.json({ message: 'boom' }, { status: 500 })))
+    server.use(http.get(apiPath('/agents'), () => HttpResponse.json({ message: 'boom' }, { status: 500 })))
     renderApp('/agents')
     await screen.findByText("Couldn't load agents.")
     expect(screen.queryByRole('button', { name: 'Register agent' })).not.toBeInTheDocument()

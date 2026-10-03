@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { renderApp } from '../../test/renderApp'
 import { server } from '../../test/server'
+import { apiPath } from '../../api/client'
 
 const table = () => screen.getByRole('table')
 const agentNames = () =>
@@ -65,7 +66,7 @@ describe('AgentsPage', () => {
 
   it('shows an empty message for a group without agents', async () => {
     server.use(
-      http.get('/api/groups', () => HttpResponse.json([{ id: 'finance', name: 'Finance' }])),
+      http.get(apiPath('/groups'), () => HttpResponse.json([{ id: 'finance', name: 'Finance' }])),
     )
     renderApp('/agents?group=finance')
     expect(await screen.findByText('No agents in this group yet')).toBeInTheDocument()
@@ -74,7 +75,7 @@ describe('AgentsPage', () => {
   it('shows an error with a working Retry', async () => {
     const user = userEvent.setup()
     server.use(
-      http.get('/api/agents', () => HttpResponse.json({ message: 'boom' }, { status: 500 }), { once: true }),
+      http.get(apiPath('/agents'), () => HttpResponse.json({ message: 'boom' }, { status: 500 }), { once: true }),
     )
     renderApp('/agents')
     expect(await screen.findByText("Couldn't load agents.")).toBeInTheDocument()

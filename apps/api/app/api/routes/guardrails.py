@@ -1,127 +1,27 @@
-import re
-from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, status
-from pydantic import BaseModel, Field, field_validator, model_validator
+from fastapi import APIRouter, HTTPException, Response, status
 
-Stage = Literal["input", "output"]
-Action = Literal["block", "redact", "warn"]
-TemplateId = Literal["pii", "prompt_injection", "toxicity", "topic", "regex", "llm_judge"]
-
-
-# --- per-template config (the discriminator is "template") ---
-class PiiConfig(BaseModel):
-    template: Literal["pii"]
-    entities: list[str] = Field(default=["EMAIL", "PHONE", "CREDIT_CARD", "IBAN"], min_length=1)
-
-
-class PromptInjectionConfig(BaseModel):
-    template: Literal["prompt_injection"]
-    use_company_signatures: bool = True
-
-
-class ToxicityConfig(BaseModel):
-    template: Literal["toxicity"]
-    threshold: float = Field(default=0.7, ge=0, le=1)
-
-
-class TopicConfig(BaseModel):
-    template: Literal["topic"]
-    mode: Literal["allow", "deny"]
-    topics: list[str] = Field(min_length=1)
-
-
-class RegexConfig(BaseModel):
-    template: Literal["regex"]
-    pattern: str = Field(min_length=1)
-    replacement: str = "[REDACTED]"
-
-    @field_validator("pattern")
-    @classmethod
-    def must_compile(cls, v: str) -> str:
-        try:
-            re.compile(v)
-        except re.error as e:
-            raise ValueError(f"invalid regex: {e}") from e
-        return v
-
-
-class LlmJudgeConfig(BaseModel):
-    template: Literal["llm_judge"]
-    prompt: str = Field(min_length=10)
-
-
-GuardrailConfig = Annotated[
-    PiiConfig | PromptInjectionConfig | ToxicityConfig | TopicConfig | RegexConfig | LlmJudgeConfig,
-    Field(discriminator="template"),
-]
-
-
-# --- template catalog: engine + allowed actions ---
-class TemplateInfo(BaseModel):
-    id: TemplateId
-    label: str
-    engine: str
-    actions: list[Action]
-
-
-TEMPLATES: dict[str, TemplateInfo] = {
-    t.id: t
-    for t in [
-        TemplateInfo(id="pii", label="PII", engine="pii", actions=["block", "redact", "warn"]),
-        TemplateInfo(
-            id="prompt_injection",
-            label="Prompt injection",
-            engine="regex",
-            actions=["block", "warn"],
-        ),
-        TemplateInfo(
-            id="toxicity", label="Toxicity", engine="moderation", actions=["block", "warn"]
-        ),
-        TemplateInfo(
-            id="topic", label="Topic allow/deny list", engine="llm_judge", actions=["block", "warn"]
-        ),
-        TemplateInfo(
-            id="regex", label="Regex", engine="regex", actions=["block", "redact", "warn"]
-        ),
-        TemplateInfo(
-            id="llm_judge", label="LLM judge", engine="llm_judge", actions=["block", "warn"]
-        ),
-    ]
-}
-
-
-# --- request / response ---
-class GuardrailCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
-    stages: list[Stage] = Field(min_length=1)
-    action: Action
-    config: GuardrailConfig
-
-    @model_validator(mode="after")
-    def check_action_and_stages(self) -> "GuardrailCreate":
-        allowed = TEMPLATES[self.config.template].actions
-        if self.action not in allowed:
-            raise ValueError(
-                f"action '{self.action}' not allowed for template "
-                f"'{self.config.template}' (allowed: {', '.join(allowed)})"
-            )
-        if len(set(self.stages)) != len(self.stages):
-            raise ValueError("stages must be unique")
-        return self
-
-
-class Guardrail(GuardrailCreate):
-    id: str
-    engine: str  # filled in from the template; a guardrail can never lack an engine (A-03)
-    enabled: bool = True
-
-
-# in-memory until A-01 adds SQLite
-_GUARDRAILS: dict[str, Guardrail] = {}
+from app.guardrails.evaluate import PatternTimeoutError, evaluate
+from app.guardrails.models import (
+    TEMPLATES,
+    DryRunRequest,
+    DryRunResult,
+    Guardrail,
+    GuardrailCreate,
+    GuardrailUpdate,
+    TemplateInfo,
+)
+from app.store import store
 
 router = APIRouter(tags=["guardrails"])
+
+
+def _get_or_404(guardrail_id: str) -> Guardrail:
+    guardrail = store.guardrails.get(guardrail_id)
+    if guardrail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guardrail not found")
+    return guardrail
 
 
 @router.get("/guardrail-templates")
@@ -131,15 +31,42 @@ def list_templates() -> list[TemplateInfo]:
 
 @router.get("/guardrails")
 def list_guardrails() -> list[Guardrail]:
-    return list(_GUARDRAILS.values())
+    return list(store.guardrails.values())
 
 
 @router.post("/guardrails", status_code=status.HTTP_201_CREATED)
 def create_guardrail(body: GuardrailCreate) -> Guardrail:
-    guardrail = Guardrail(
-        id=f"gr-{uuid4().hex[:8]}",
-        engine=TEMPLATES[body.config.template].engine,
-        **body.model_dump(),
-    )
-    _GUARDRAILS[guardrail.id] = guardrail
+    guardrail = Guardrail(id=f"gr-{uuid4().hex[:8]}", **body.model_dump())
+    store.guardrails[guardrail.id] = guardrail
     return guardrail
+
+
+@router.post("/guardrails/dry-run")
+def dry_run(body: DryRunRequest) -> DryRunResult:
+    try:
+        return evaluate(body, body.text, list(store.signatures.values()))
+    except PatternTimeoutError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Pattern took too long to run on this text",
+        ) from e
+
+
+@router.get("/guardrails/{guardrail_id}")
+def get_guardrail(guardrail_id: str) -> Guardrail:
+    return _get_or_404(guardrail_id)
+
+
+@router.patch("/guardrails/{guardrail_id}")
+def update_guardrail(guardrail_id: str, body: GuardrailUpdate) -> Guardrail:
+    current = _get_or_404(guardrail_id)
+    updated = current.model_copy(update=body.model_dump(exclude_unset=True))
+    store.guardrails[guardrail_id] = updated
+    return updated
+
+
+@router.delete("/guardrails/{guardrail_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_guardrail(guardrail_id: str) -> Response:
+    _get_or_404(guardrail_id)
+    del store.guardrails[guardrail_id]
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

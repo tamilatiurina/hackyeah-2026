@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { AgentsPage } from '../pages/agents/AgentsPage'
+import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
 import { Placeholder } from '../pages/Placeholder'
 import { Layout } from './Layout'
 import { homeFor, navItemsFor } from './nav'
@@ -9,6 +10,7 @@ import { useRole } from './role'
 // Screens that exist; every other nav item renders its placeholder.
 const PAGES: Partial<Record<string, ReactElement>> = {
   '/agents': <AgentsPage />,
+  '/guardrails': <GuardrailsPage />,
 }
 
 export function AppRoutes() {

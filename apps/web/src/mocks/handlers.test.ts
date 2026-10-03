@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { getJson, postJson } from '../api/client'
 import type { Agent, ConnectionResult, Group } from '../api/types'
 
-const register = (body: object) => postJson<Agent>('/api/agents', body)
+const register = (body: object) => postJson<Agent>('/agents', body)
 
 describe('mock agents API', () => {
   it('lists the seven seed agents in prototype order', async () => {
-    const agents = await getJson<Agent[]>('/api/agents')
+    const agents = await getJson<Agent[]>('/agents')
     expect(agents.map((a) => a.id)).toEqual([
       'dev-agent',
       'demo-agent',
@@ -24,7 +24,7 @@ describe('mock agents API', () => {
   })
 
   it('lists the four seed groups', async () => {
-    const groups = await getJson<Group[]>('/api/groups')
+    const groups = await getJson<Group[]>('/groups')
     expect(groups.map((g) => g.id)).toEqual(['customer-service', 'legal', 'people', 'engineering'])
   })
 
@@ -40,7 +40,7 @@ describe('mock agents API', () => {
       online: false,
       lastSeenAt: null,
     })
-    expect(await getJson<Agent[]>('/api/agents')).toHaveLength(8)
+    expect(await getJson<Agent[]>('/agents')).toHaveLength(8)
   })
 
   it('registers a reachable proxy agent as a draft with trimmed fields', async () => {
@@ -77,7 +77,7 @@ describe('mock agents API', () => {
       field: 'upstreamUrl',
       message: "Can't reach https://billing.unreachable.test: host not found",
     })
-    expect(await getJson<Agent[]>('/api/agents')).toHaveLength(7)
+    expect(await getJson<Agent[]>('/agents')).toHaveLength(7)
   })
 
   it('refuses a duplicate name regardless of case and surrounding spaces', async () => {
@@ -107,30 +107,30 @@ describe('mock agents API', () => {
   })
 
   it('creates a group and refuses a duplicate name', async () => {
-    await expect(postJson<Group>('/api/groups', { name: ' Finance ' })).resolves.toEqual({
+    await expect(postJson<Group>('/groups', { name: ' Finance ' })).resolves.toEqual({
       id: 'finance',
       name: 'Finance',
     })
-    await expect(postJson('/api/groups', { name: 'legal' })).rejects.toMatchObject({
+    await expect(postJson('/groups', { name: 'legal' })).rejects.toMatchObject({
       status: 409,
       message: 'A group with this name already exists',
     })
-    await expect(postJson('/api/groups', { name: '  ' })).rejects.toMatchObject({ status: 422 })
+    await expect(postJson('/groups', { name: '  ' })).rejects.toMatchObject({ status: 422 })
   })
 
   it('tests connections', async () => {
-    const ok = await postJson<ConnectionResult>('/api/agents/test-connection', {
+    const ok = await postJson<ConnectionResult>('/agents/test-connection', {
       upstreamUrl: 'https://billing.acme.internal',
     })
     expect(ok.reachable).toBe(true)
-    const bad = await postJson<ConnectionResult>('/api/agents/test-connection', {
+    const bad = await postJson<ConnectionResult>('/agents/test-connection', {
       upstreamUrl: 'https://billing.unreachable.test',
     })
     expect(bad).toEqual({ reachable: false, error: "Can't reach https://billing.unreachable.test: host not found" })
-    await expect(postJson('/api/agents/test-connection', {})).rejects.toMatchObject({ status: 422 })
+    await expect(postJson('/agents/test-connection', {})).rejects.toMatchObject({ status: 422 })
   })
 
   it('starts every test from the seed data', async () => {
-    expect(await getJson<Agent[]>('/api/agents')).toHaveLength(7)
+    expect(await getJson<Agent[]>('/agents')).toHaveLength(7)
   })
 })

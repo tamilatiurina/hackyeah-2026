@@ -8,17 +8,17 @@ export const agentKeys = {
 }
 
 export function useAgents() {
-  return useQuery({ queryKey: agentKeys.agents, queryFn: () => getJson<Agent[]>('/api/agents') })
+  return useQuery({ queryKey: agentKeys.agents, queryFn: () => getJson<Agent[]>('/agents') })
 }
 
 export function useGroups() {
-  return useQuery({ queryKey: agentKeys.groups, queryFn: () => getJson<Group[]>('/api/groups') })
+  return useQuery({ queryKey: agentKeys.groups, queryFn: () => getJson<Group[]>('/groups') })
 }
 
 export function useRegisterAgent() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: RegisterAgentInput) => postJson<Agent>('/api/agents', input),
+    mutationFn: (input: RegisterAgentInput) => postJson<Agent>('/agents', input),
     onSuccess: (agent) => {
       // Show the new row immediately, then refetch to stay in sync with the server.
       queryClient.setQueryData<Agent[]>(agentKeys.agents, (old) => (old ? [...old, agent] : [agent]))
@@ -30,7 +30,7 @@ export function useRegisterAgent() {
 export function useCreateGroup() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (name: string) => postJson<Group>('/api/groups', { name }),
+    mutationFn: (name: string) => postJson<Group>('/groups', { name }),
     onSuccess: (group) => {
       queryClient.setQueryData<Group[]>(agentKeys.groups, (old) => (old ? [...old, group] : [group]))
       void queryClient.invalidateQueries({ queryKey: agentKeys.groups })
@@ -39,5 +39,5 @@ export function useCreateGroup() {
 }
 
 export function testConnection(upstreamUrl: string): Promise<ConnectionResult> {
-  return postJson<ConnectionResult>('/api/agents/test-connection', { upstreamUrl })
+  return postJson<ConnectionResult>('/agents/test-connection', { upstreamUrl })
 }
