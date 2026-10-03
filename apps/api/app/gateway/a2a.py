@@ -170,3 +170,27 @@ def rejected_task(context_id: Any, reason: str, hub: Json) -> Json:
             "metadata": {METADATA_KEY: hub},
         }
     }
+
+
+def usage_tokens(reply: dict[str, Any]) -> tuple[int, int]:
+    """(input, output) tokens from the reply's metadata.usage (profile §usage), else (0, 0)."""
+    result = reply.get("result")
+    if not isinstance(result, dict):
+        return 0, 0
+    holder = (
+        result.get("message") if isinstance(result.get("message"), dict) else result.get("task")
+    )
+    metadata = holder.get("metadata") if isinstance(holder, dict) else None
+    usage = metadata.get("usage") if isinstance(metadata, dict) else None
+    if not isinstance(usage, dict):
+        return 0, 0
+
+    def count(name: str) -> int:
+        value = usage.get(name)
+        return (
+            max(int(value), 0)
+            if isinstance(value, int | float) and not isinstance(value, bool)
+            else 0
+        )
+
+    return count("inputTokens"), count("outputTokens")

@@ -22,6 +22,8 @@ from a2a.client import (
 )
 from a2a.types import a2a_pb2 as a2a_types
 from app.api.routes.agents.deps import AgentDatabase, ResolvedUpstream, get_agent_database
+from app.audit.memory import MEMORY
+from app.audit.recorder import InMemoryAuditRecorder, get_audit_recorder
 from app.bindings.models import EffectivePolicy
 from app.bindings.resolve import resolve
 from app.gateway import router as gateway_router
@@ -400,3 +402,74 @@ def test_gateway_key_for_someone_elses_agent_is_404() -> None:
         client=database, owner_id="971f4031-2dd9-4327-94c7-45323de61c67"
     )
     assert client.post(f"/api/v1/agents/{AGENT_ID}/gateway-key").status_code == 404
+
+
+# --- A-07: session counters ---------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def memory_recorder() -> None:
+    app.dependency_overrides[get_audit_recorder] = InMemoryAuditRecorder
+
+
+def with_context(context_id: str | None) -> dict[str, Any]:
+    body = json.loads(json.dumps(SEND))
+    if context_id is not None:
+        body["params"]["message"]["contextId"] = context_id
+    return body
+
+
+def reply_with_usage(usage: object) -> Callable[[httpx.Request], httpx.Response]:
+    def rpc(request: httpx.Request) -> httpx.Response:
+        message = {
+            "messageId": "r-1",
+            "role": "ROLE_AGENT",
+            "parts": [{"text": "ok"}],
+            "metadata": {"usage": usage},
+        }
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"message": message}})
+
+    return rpc
+
+
+def test_a_forwarded_call_counts_a_turn_with_the_reply_usage() -> None:
+    scripted_upstream(reply_with_usage({"inputTokens": 12, "outputTokens": 7}))
+    assert post(with_context("ctx-1")).status_code == 200
+    assert post(with_context("ctx-1")).status_code == 200
+    session = MEMORY.sessions[(AGENT_ID, "ctx-1")]
+    assert (session.turns, session.input_tokens, session.output_tokens) == (2, 24, 14)
+
+
+@pytest.mark.parametrize("usage", [None, "lots", {"inputTokens": "x"}, {"inputTokens": -5}])
+def test_missing_or_bad_usage_counts_zero_tokens(usage: object) -> None:
+    scripted_upstream(reply_with_usage(usage))
+    assert post(with_context("ctx-1")).status_code == 200
+    session = MEMORY.sessions[(AGENT_ID, "ctx-1")]
+    assert (session.turns, session.input_tokens, session.output_tokens) == (1, 0, 0)
+
+
+def test_no_context_id_or_an_agent_error_records_nothing() -> None:
+    scripted_upstream(reply_with_usage({"inputTokens": 1, "outputTokens": 1}))
+    post(with_context(None))
+    scripted_upstream(
+        lambda r: httpx.Response(
+            200, json={"jsonrpc": "2.0", "id": 1, "error": {"code": -32603, "message": "boom"}}
+        )
+    )
+    post(with_context("ctx-err"))
+    assert MEMORY.sessions == {}
+
+
+def test_a_recorder_failure_does_not_change_the_reply() -> None:
+    class Broken:
+        def record_turn(self, *args: object) -> None:
+            raise RuntimeError("storage down")
+
+        def record_events(self, *args: object) -> int:
+            raise RuntimeError("storage down")
+
+    app.dependency_overrides[get_audit_recorder] = Broken
+    scripted_upstream(reply_with_usage({"inputTokens": 1, "outputTokens": 1}))
+    r = post(with_context("ctx-1"))
+    assert r.status_code == 200
+    assert r.json()["result"]["message"]["parts"] == [{"text": "ok"}]
