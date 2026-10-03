@@ -3,7 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { apiPath } from '../api/client'
 import { AppRoutes } from '../app/AppRoutes'
 import { RoleProvider } from '../app/RoleProvider'
@@ -18,6 +18,21 @@ async function signIn(user: ReturnType<typeof userEvent.setup>, password = DEMO_
   await user.type(screen.getByLabelText('Email'), DEMO_EMAIL)
   await user.type(screen.getByLabelText('Password'), password)
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
+}
+
+function renderUnconfigured() {
+  const queryClient = new QueryClient()
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/fleet']}>
+        <AuthProvider client={null}>
+          <RoleProvider>
+            <AppRoutes />
+          </RoleProvider>
+        </AuthProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
 }
 
 describe('sign-in', () => {
@@ -78,6 +93,17 @@ describe('sign-in', () => {
   it('redirects signed-in users away from /sign-in', () => {
     renderApp('/sign-in')
     expect(location()).toBe('/fleet')
+  })
+
+  it('tells production visitors the deployment lacks Supabase settings', () => {
+    vi.stubEnv('DEV', false)
+    try {
+      renderUnconfigured()
+      expect(screen.getByText(/built without VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY/)).toBeInTheDocument()
+      expect(screen.queryByText(/\.env\.local/)).not.toBeInTheDocument()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('explains missing Supabase configuration', () => {
