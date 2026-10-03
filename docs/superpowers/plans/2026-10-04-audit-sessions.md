@@ -395,14 +395,21 @@ AGENT = "7b4eb987-4315-4745-83c7-258061f2f2c4"
 
 def pii(action: str = "redact") -> AuditEventIn:
     return AuditEventIn(
-        rule_id="g-pii", rule_name="PII", kind="guardrail", stage="output", action=action,
+        rule_id="g-pii",
+        rule_name="PII",
+        kind="guardrail",
+        stage="output",
+        action=action,
         details="email address",
     )
 
 
 def session_cap() -> AuditEventIn:
     return AuditEventIn(
-        rule_id="maxSessionTokens", rule_name="Session tokens", kind="limit", action="block",
+        rule_id="maxSessionTokens",
+        rule_name="Session tokens",
+        kind="limit",
+        action="block",
         details="Session token cap reached",
     )
 
@@ -452,9 +459,16 @@ def test_supabase_recorder_sends_only_the_key_hash() -> None:
     client = MagicMock()
     client.rpc.return_value.execute.return_value.data = [
         {
-            "agent_id": AGENT, "context_id": "ctx-1", "turns": 1, "input_tokens": 3,
-            "output_tokens": 2, "cost_usd": 0, "started_at": "2026-10-04T10:00:00+00:00",
-            "last_at": "2026-10-04T10:00:00+00:00", "stopped_at": None, "stop_reason": None,
+            "agent_id": AGENT,
+            "context_id": "ctx-1",
+            "turns": 1,
+            "input_tokens": 3,
+            "output_tokens": 2,
+            "cost_usd": 0,
+            "started_at": "2026-10-04T10:00:00+00:00",
+            "last_at": "2026-10-04T10:00:00+00:00",
+            "stopped_at": None,
+            "stop_reason": None,
         }
     ]
     counters = SupabaseAuditRecorder(client).record_turn(AGENT, "secret-key", "ctx-1", 3, 2, 0.0)
@@ -624,7 +638,11 @@ def decode(cursor: str, size: int) -> list[str]:
         parts = json.loads(raw)
     except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("Invalid cursor") from error
-    if not isinstance(parts, list) or len(parts) != size or not all(isinstance(p, str) for p in parts):
+    if (
+        not isinstance(parts, list)
+        or len(parts) != size
+        or not all(isinstance(p, str) for p in parts)
+    ):
         raise ValueError("Invalid cursor")
     return parts
 ```
@@ -679,8 +697,13 @@ LIMIT_REACHED = "Limit reached"
 
 class AuditRecorder(Protocol):
     def record_turn(
-        self, agent_id: str, key: str, context_id: str,
-        input_tokens: int, output_tokens: int, cost_usd: float,
+        self,
+        agent_id: str,
+        key: str,
+        context_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
     ) -> SessionCounters | None: ...
 
     def record_events(
@@ -697,15 +720,26 @@ def _stop_reason(events: list[AuditEventIn]) -> str | None:
 
 class InMemoryAuditRecorder:
     def record_turn(
-        self, agent_id: str, key: str, context_id: str,
-        input_tokens: int, output_tokens: int, cost_usd: float,
+        self,
+        agent_id: str,
+        key: str,
+        context_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
     ) -> SessionCounters | None:
         now = datetime.now(UTC)
         current = MEMORY.sessions.get((agent_id, context_id))
         if current is None:
             current = SessionCounters(
-                agent_id=agent_id, context_id=context_id, turns=0, input_tokens=0,
-                output_tokens=0, cost_usd=0.0, started_at=now, last_at=now,
+                agent_id=agent_id,
+                context_id=context_id,
+                turns=0,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                started_at=now,
+                last_at=now,
             )
         updated = current.model_copy(
             update={
@@ -726,15 +760,24 @@ class InMemoryAuditRecorder:
         for event in events:
             MEMORY.events.append(
                 AuditEvent(
-                    **event.model_dump(), id=str(uuid4()), at=now,
-                    agent_id=agent_id, context_id=context_id,
+                    **event.model_dump(),
+                    id=str(uuid4()),
+                    at=now,
+                    agent_id=agent_id,
+                    context_id=context_id,
                 )
             )
         reason = _stop_reason(events)
         if reason and context_id is not None:
             current = MEMORY.sessions.get((agent_id, context_id)) or SessionCounters(
-                agent_id=agent_id, context_id=context_id, turns=0, input_tokens=0,
-                output_tokens=0, cost_usd=0.0, started_at=now, last_at=now,
+                agent_id=agent_id,
+                context_id=context_id,
+                turns=0,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                started_at=now,
+                last_at=now,
             )
             MEMORY.sessions[(agent_id, context_id)] = current.model_copy(
                 update={
@@ -753,8 +796,13 @@ class SupabaseAuditRecorder:
         self._client = client
 
     def record_turn(
-        self, agent_id: str, key: str, context_id: str,
-        input_tokens: int, output_tokens: int, cost_usd: float,
+        self,
+        agent_id: str,
+        key: str,
+        context_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
     ) -> SessionCounters | None:
         data = (
             self._client.rpc(
@@ -807,7 +855,10 @@ in `fresh_store()`:
 
 ```python
 from app.audit.memory import reset_in_memory_audit  # noqa: E402  (needs the path above)
+
 ...
+
+
 def fresh_store() -> None:
     reset_store()
     reset_in_memory_servers()
@@ -865,8 +916,12 @@ CONTRACTS = "0b9a3a3e-8f39-4b55-9a5e-1d1c2b3a4f5e"
 
 def hit(rule_id: str, action: str, kind: str = "guardrail") -> AuditEventIn:
     return AuditEventIn(
-        rule_id=rule_id, rule_name=rule_id.upper(), kind=kind, action=action,
-        stage="input" if kind == "guardrail" else None, details=f"{rule_id} {action}",
+        rule_id=rule_id,
+        rule_name=rule_id.upper(),
+        kind=kind,
+        action=action,
+        stage="input" if kind == "guardrail" else None,
+        details=f"{rule_id} {action}",
     )
 
 
@@ -883,13 +938,19 @@ def events() -> None:
 def test_events_newest_first(events: None) -> None:
     body = client.get("/api/v1/audit-events").json()
     assert [e["details"] for e in body["data"]] == [
-        "pii warn", "maxSessionTokens block", "pii block", "inject block", "pii redact",
+        "pii warn",
+        "maxSessionTokens block",
+        "pii block",
+        "inject block",
+        "pii redact",
     ]
     assert body["next_cursor"] is None
 
 
 def test_filters_combine(events: None) -> None:
-    r = client.get("/api/v1/audit-events", params={"agent_id": SUPPORT, "rule_id": "pii", "action": "redact"})
+    r = client.get(
+        "/api/v1/audit-events", params={"agent_id": SUPPORT, "rule_id": "pii", "action": "redact"}
+    )
     assert [e["details"] for e in r.json()["data"]] == ["pii redact"]
     r = client.get("/api/v1/audit-events", params={"kind": "limit"})
     assert [e["rule_id"] for e in r.json()["data"]] == ["maxSessionTokens"]
@@ -900,8 +961,12 @@ def test_filters_combine(events: None) -> None:
 def test_paging_with_the_cursor_has_no_overlap(events: None) -> None:
     first = client.get("/api/v1/audit-events", params={"limit": 2}).json()
     assert len(first["data"]) == 2 and first["next_cursor"]
-    second = client.get("/api/v1/audit-events", params={"limit": 2, "before": first["next_cursor"]}).json()
-    third = client.get("/api/v1/audit-events", params={"limit": 2, "before": second["next_cursor"]}).json()
+    second = client.get(
+        "/api/v1/audit-events", params={"limit": 2, "before": first["next_cursor"]}
+    ).json()
+    third = client.get(
+        "/api/v1/audit-events", params={"limit": 2, "before": second["next_cursor"]}
+    ).json()
     ids = [e["id"] for page in (first, second, third) for e in page["data"]]
     assert len(ids) == 5 and len(set(ids)) == 5
     assert third["next_cursor"] is None
@@ -912,7 +977,9 @@ def test_a_bad_cursor_is_422(before: str) -> None:
     assert client.get("/api/v1/audit-events", params={"before": before}).status_code == 422
 
 
-@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": 201}, {"action": "drop"}, {"kind": "x"}])
+@pytest.mark.parametrize(
+    "params", [{"limit": 0}, {"limit": 201}, {"action": "drop"}, {"kind": "x"}]
+)
 def test_bad_filters_are_422(params: dict[str, object]) -> None:
     assert client.get("/api/v1/audit-events", params=params).status_code == 422
 
@@ -950,7 +1017,9 @@ def test_session_filters_and_paging(events: None) -> None:
     mine = client.get("/api/v1/sessions", params={"agent_id": CONTRACTS}).json()["data"]
     assert [s["context_id"] for s in mine] == ["ctx-b"]
     first = client.get("/api/v1/sessions", params={"limit": 2}).json()
-    rest = client.get("/api/v1/sessions", params={"limit": 2, "before": first["next_cursor"]}).json()
+    rest = client.get(
+        "/api/v1/sessions", params={"limit": 2, "before": first["next_cursor"]}
+    ).json()
     assert len(first["data"]) == 2 and len(rest["data"]) == 1 and rest["next_cursor"] is None
 
 
@@ -992,8 +1061,14 @@ from pydantic import ValidationError
 from app.audit import cursor
 from app.audit.memory import MEMORY
 from app.audit.models import (
-    AuditEvent, AuditEventPage, AuditRule, EventFilters, SessionCounters, SessionFilters,
-    SessionPage, to_session,
+    AuditEvent,
+    AuditEventPage,
+    AuditRule,
+    EventFilters,
+    SessionCounters,
+    SessionFilters,
+    SessionPage,
+    to_session,
 )
 from app.core.config import settings
 from app.core.supabase import get_supabase_for_user
@@ -1032,7 +1107,8 @@ def _sorted_rules(rules: dict[str, AuditRule]) -> list[AuditRule]:
 class InMemoryAuditRepository:
     def events(self, filters: EventFilters) -> AuditEventPage:
         rows = [
-            e for e in reversed(MEMORY.events)
+            e
+            for e in reversed(MEMORY.events)
             if (filters.agent_id is None or e.agent_id == filters.agent_id)
             and (filters.rule_id is None or e.rule_id == filters.rule_id)
             and (filters.action is None or e.action == filters.action)
@@ -1058,9 +1134,13 @@ class InMemoryAuditRepository:
         counts = Counter((e.agent_id, e.context_id) for e in MEMORY.events)
         rows = sorted(MEMORY.sessions.values(), key=lambda s: s.last_at, reverse=True)
         rows = [
-            s for s in rows
+            s
+            for s in rows
             if (filters.agent_id is None or s.agent_id == filters.agent_id)
-            and (filters.status is None or (s.stopped_at is not None) == (filters.status == "stopped"))
+            and (
+                filters.status is None
+                or (s.stopped_at is not None) == (filters.status == "stopped")
+            )
         ]
         page = rows[filters.offset : filters.offset + filters.limit]
         end = filters.offset + len(page)
@@ -1098,8 +1178,11 @@ class SupabaseAuditRepository:
     def events(self, filters: EventFilters) -> AuditEventPage:
         query = self._client.table("audit_events").select(_EVENT_COLUMNS)
         for column, value in (
-            ("agent_id", filters.agent_id), ("rule_id", filters.rule_id),
-            ("action", filters.action), ("kind", filters.kind), ("context_id", filters.context_id),
+            ("agent_id", filters.agent_id),
+            ("rule_id", filters.rule_id),
+            ("action", filters.action),
+            ("kind", filters.kind),
+            ("context_id", filters.context_id),
         ):
             if value is not None:
                 query = query.eq(column, value)
@@ -1108,7 +1191,12 @@ class SupabaseAuditRepository:
             stamp = at.isoformat()  # both values come from a decoded cursor: a timestamp and a uuid
             query = query.or_(f"at.lt.{stamp},and(at.eq.{stamp},id.lt.{last_id})")
         response = self._run(
-            lambda: query.order("at", desc=True).order("id", desc=True).limit(filters.limit + 1).execute()
+            lambda: (
+                query.order("at", desc=True)
+                .order("id", desc=True)
+                .limit(filters.limit + 1)
+                .execute()
+            )
         )
         rows = list(response.data)
         try:
@@ -1117,14 +1205,21 @@ class SupabaseAuditRepository:
                 for row in rows[: filters.limit]
             ]
         except ValidationError as error:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Stored audit event is invalid") from error
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "Stored audit event is invalid"
+            ) from error
         more = len(rows) > filters.limit
         return AuditEventPage(data=page, next_cursor=event_cursor(page[-1]) if more else None)
 
     def rules(self) -> list[AuditRule]:
         response = self._run(
-            lambda: self._client.table("audit_events").select("rule_id,rule_name,kind")
-            .order("at", desc=True).limit(_RULES_SCAN).execute()
+            lambda: (
+                self._client.table("audit_events")
+                .select("rule_id,rule_name,kind")
+                .order("at", desc=True)
+                .limit(_RULES_SCAN)
+                .execute()
+            )
         )
         seen: dict[str, AuditRule] = {}
         for row in response.data:
@@ -1140,9 +1235,11 @@ class SupabaseAuditRepository:
         elif filters.status == "stopped":
             query = query.not_.is_("stopped_at", "null")
         response = self._run(
-            lambda: query.order("last_at", desc=True)
-            .range(filters.offset, filters.offset + filters.limit)  # inclusive: one extra row
-            .execute()
+            lambda: (
+                query.order("last_at", desc=True)
+                .range(filters.offset, filters.offset + filters.limit)  # inclusive: one extra row
+                .execute()
+            )
         )
         rows = list(response.data)
         page_rows = rows[: filters.limit]
@@ -1150,20 +1247,26 @@ class SupabaseAuditRepository:
         context_ids = sorted({row["context_id"] for row in page_rows})
         if context_ids:
             found = self._run(
-                lambda: self._client.table("audit_events").select("agent_id,context_id")
-                .in_("context_id", context_ids).execute()
+                lambda: (
+                    self._client.table("audit_events")
+                    .select("agent_id,context_id")
+                    .in_("context_id", context_ids)
+                    .execute()
+                )
             )
             counts = Counter((e["agent_id"], e["context_id"]) for e in found.data)
         sessions = [
             to_session(
-                SessionCounters.model_validate(row), _agent_name(row),
+                SessionCounters.model_validate(row),
+                _agent_name(row),
                 counts[(row["agent_id"], row["context_id"])],
             )
             for row in page_rows
         ]
         end = filters.offset + len(page_rows)
         return SessionPage(
-            data=sessions, next_cursor=cursor.encode([str(end)]) if len(rows) > filters.limit else None
+            data=sessions,
+            next_cursor=cursor.encode([str(end)]) if len(rows) > filters.limit else None,
         )
 
 
@@ -1213,11 +1316,20 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.audit.models import (
-    Action, AuditEventPage, AuditRule, EventFilters, Kind, SessionFilters, SessionPage,
+    Action,
+    AuditEventPage,
+    AuditRule,
+    EventFilters,
+    Kind,
+    SessionFilters,
+    SessionPage,
     SessionStatus,
 )
 from app.audit.repository import (
-    AuditRepository, get_audit_repository, parse_event_cursor, parse_session_cursor,
+    AuditRepository,
+    get_audit_repository,
+    parse_event_cursor,
+    parse_session_cursor,
 )
 
 router = APIRouter(tags=["audit"])
@@ -1246,8 +1358,13 @@ def list_audit_events(
         raise _bad_cursor() from error
     return repo.events(
         EventFilters(
-            agent_id=str(agent_id) if agent_id else None, rule_id=rule_id, action=action,
-            kind=kind, context_id=context_id, limit=limit, before=cursor,
+            agent_id=str(agent_id) if agent_id else None,
+            rule_id=rule_id,
+            action=action,
+            kind=kind,
+            context_id=context_id,
+            limit=limit,
+            before=cursor,
         )
     )
 
@@ -1325,9 +1442,14 @@ def with_context(context_id: str | None) -> dict[str, Any]:
 
 def reply_with_usage(usage: object) -> Callable[[httpx.Request], httpx.Response]:
     def rpc(request: httpx.Request) -> httpx.Response:
-        message = {"messageId": "r-1", "role": "ROLE_AGENT", "parts": [{"text": "ok"}],
-                   "metadata": {"usage": usage}}
+        message = {
+            "messageId": "r-1",
+            "role": "ROLE_AGENT",
+            "parts": [{"text": "ok"}],
+            "metadata": {"usage": usage},
+        }
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"message": message}})
+
     return rpc
 
 
@@ -1351,7 +1473,9 @@ def test_no_context_id_or_an_agent_error_records_nothing() -> None:
     scripted_upstream(reply_with_usage({"inputTokens": 1, "outputTokens": 1}))
     post(with_context(None))
     scripted_upstream(
-        lambda r: httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "error": {"code": -32603, "message": "boom"}})
+        lambda r: httpx.Response(
+            200, json={"jsonrpc": "2.0", "id": 1, "error": {"code": -32603, "message": "boom"}}
+        )
     )
     post(with_context("ctx-err"))
     assert MEMORY.sessions == {}
@@ -1387,7 +1511,9 @@ def usage_tokens(reply: dict[str, Any]) -> tuple[int, int]:
     result = reply.get("result")
     if not isinstance(result, dict):
         return 0, 0
-    holder = result.get("message") if isinstance(result.get("message"), dict) else result.get("task")
+    holder = (
+        result.get("message") if isinstance(result.get("message"), dict) else result.get("task")
+    )
     metadata = holder.get("metadata") if isinstance(holder, dict) else None
     usage = metadata.get("usage") if isinstance(metadata, dict) else None
     if not isinstance(usage, dict):
@@ -1395,7 +1521,11 @@ def usage_tokens(reply: dict[str, Any]) -> tuple[int, int]:
 
     def count(name: str) -> int:
         value = usage.get(name)
-        return max(int(value), 0) if isinstance(value, int | float) and not isinstance(value, bool) else 0
+        return (
+            max(int(value), 0)
+            if isinstance(value, int | float) and not isinstance(value, bool)
+            else 0
+        )
 
     return count("inputTokens"), count("outputTokens")
 ```

@@ -80,10 +80,18 @@ Gateway functions (`security definer`, `set search_path = ''`, executable by `an
 
 ```python
 class AuditRecorder(Protocol):
-    def record_turn(self, agent_id: str, key: str, context_id: str,
-                    input_tokens: int, output_tokens: int, cost_usd: float) -> SessionCounters | None: ...
-    def record_events(self, agent_id: str, key: str, context_id: str | None,
-                      events: list[AuditEventIn]) -> int: ...
+    def record_turn(
+        self,
+        agent_id: str,
+        key: str,
+        context_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+    ) -> SessionCounters | None: ...
+    def record_events(
+        self, agent_id: str, key: str, context_id: str | None, events: list[AuditEventIn]
+    ) -> int: ...
 ```
 
 In-memory implementation (shared module-level store, used without Supabase and in tests) and a

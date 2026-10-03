@@ -150,10 +150,22 @@ tables directly:
 from app.audit.models import AuditEventIn
 from app.audit.recorder import AuditRecorder, get_audit_recorder  # FastAPI dependency
 
-recorder.record_events(agent_id, gateway_key, context_id, [
-    AuditEventIn(rule_id=g.id, rule_name=g.name, kind="guardrail", stage="input",
-                 action="block", config_version=effective.version, details=reason),
-])
+recorder.record_events(
+    agent_id,
+    gateway_key,
+    context_id,
+    [
+        AuditEventIn(
+            rule_id=g.id,
+            rule_name=g.name,
+            kind="guardrail",
+            stage="input",
+            action="block",
+            config_version=effective.version,
+            details=reason,
+        ),
+    ],
+)
 ```
 
 A `kind="limit"` event with `action="block"` marks the session stopped, with `details` as the
