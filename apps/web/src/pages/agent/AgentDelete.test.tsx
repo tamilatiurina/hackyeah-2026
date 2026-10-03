@@ -24,6 +24,16 @@ describe('Delete agent', () => {
     expect(fakeApi.agents.map((a) => a.id)).toEqual(['agent-contracts'])
   })
 
+  it('forgets the deleted agent so Back does not show it again', async () => {
+    const user = userEvent.setup()
+    const { queryClient } = renderApp('/agents/agent-support')
+    await screen.findByRole('heading', { level: 1, name: 'Support Assistant' })
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm delete' }))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/agents'))
+    await waitFor(() => expect(queryClient.getQueryData(['agents', 'agent-support'])).toBeUndefined())
+  })
+
   it('cancels when focus moves away', async () => {
     const user = await open()
     await user.click(screen.getByRole('button', { name: 'Delete' }))

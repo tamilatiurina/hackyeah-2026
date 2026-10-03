@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUpdateAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
 import { useGuardrails } from '../../api/guardrails'
@@ -28,24 +28,56 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
     () => [...(agent.attached_rules ?? [])].sort((a, b) => a.order_index - b.order_index),
     [agent.attached_rules],
   )
-  const savedIds = useMemo(() => rules.filter((r) => r.rule_type === 'guardrail').map((r) => r.rule_id), [rules])
+  const library = useMemo(() => guardrails.data ?? [], [guardrails.data])
+  // Mandatory guardrails always run; they are never listed (or saved) as attachments.
+  const mandatoryIds = useMemo(() => new Set(library.filter((g) => g.mandatory).map((g) => g.id)), [library])
+  const savedIds = useMemo(
+    () => rules.filter((r) => r.rule_type === 'guardrail' && !mandatoryIds.has(r.rule_id)).map((r) => r.rule_id),
+    [rules, mandatoryIds],
+  )
   const [draft, setDraft] = useState<string[] | null>(null) // null = no local changes
   const [pick, setPick] = useState('')
   const ids = draft ?? savedIds
   const dirty = draft !== null && draft.join('\n') !== savedIds.join('\n')
 
-  const library = guardrails.data ?? []
   const byId = new Map(library.map((g) => [g.id, g]))
   const mandatory = library.filter((g) => g.mandatory)
   const attachable = library.filter((g) => g.enabled && !g.mandatory && !ids.includes(g.id))
 
+  const sectionRef = useRef<HTMLElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const selectRef = useRef<HTMLSelectElement>(null)
+  // Where keyboard focus goes after the next render: 'heading', or a button's aria-label.
+  const pendingFocus = useRef<string | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+
+  useEffect(() => {
+    const target = pendingFocus.current
+    if (!target) return
+    pendingFocus.current = null
+    if (target === 'heading') {
+      headingRef.current?.focus()
+      return
+    }
+    const buttons = sectionRef.current?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? []
+    for (const button of buttons) {
+      if (button.getAttribute('aria-label') === target) button.focus()
+    }
+  })
+
   const edit = (next: string[]) => {
+    setAnnouncement('')
     update.reset()
     setDraft(next)
   }
+  const nameOf = (id: string) => byId.get(id)?.name ?? `Unknown guardrail (${id})`
   const move = (index: number, delta: number) => {
     const next = [...ids]
     ;[next[index], next[index + delta]] = [next[index + delta], next[index]]
+    const target = index + delta
+    // At either end the pressed arrow becomes disabled, so focus the other one.
+    const direction = target === 0 ? 'down' : target === next.length - 1 ? 'up' : delta < 0 ? 'up' : 'down'
+    pendingFocus.current = `Move ${nameOf(ids[index])} ${direction}`
     edit(next)
   }
   const save = () =>
@@ -56,17 +88,26 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
           ...rules.filter((r) => r.rule_type === 'policy').map(({ rule_id, rule_type }) => ({ rule_id, rule_type })),
         ],
       },
-      { onSuccess: () => setDraft(null) },
+      {
+        onSuccess: () => {
+          setDraft(null)
+          setAnnouncement('Guardrails saved')
+          pendingFocus.current = 'heading'
+        },
+      },
     )
 
   const saveError =
     update.error instanceof ApiError && update.error.status === 405 ? ATTACH_UNAVAILABLE : update.error?.message
 
   return (
-    <section aria-labelledby="agent-guardrails-title" className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 sm:p-6">
+    <section ref={sectionRef} aria-labelledby="agent-guardrails-title" className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 sm:p-6">
       <h2 id="agent-guardrails-title" className="m-0 text-lg font-semibold">
         Guardrails
       </h2>
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
 
       {guardrails.isError ? (
         <p role="alert" className="m-0 text-sm">
@@ -100,7 +141,7 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
             <p className="m-0 text-sm text-muted">{ATTACH_UNAVAILABLE}</p>
           ) : (
             <div className="flex flex-col gap-3">
-              <h3 id="attached-guardrails" className={sub}>
+              <h3 id="attached-guardrails" ref={headingRef} tabIndex={-1} className={sub}>
                 Attached guardrails
               </h3>
               {ids.length === 0 ? (
@@ -130,7 +171,10 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
                           >
                             ↓
                           </button>
-                          <button type="button" className={small} aria-label={`Remove ${name}`} onClick={() => edit(ids.filter((x) => x !== id))}>
+                          <button type="button" className={small} aria-label={`Remove ${name}`} onClick={() => {
+                              pendingFocus.current = 'heading'
+                              edit(ids.filter((x) => x !== id))
+                            }}>
                             Remove
                           </button>
                         </span>
@@ -145,7 +189,7 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
                   <label htmlFor="attach-guardrail" className="text-[13px] font-semibold text-[#30343B]">
                     Attach guardrail
                   </label>
-                  <select id="attach-guardrail" value={pick} onChange={(e) => setPick(e.target.value)} className={inputClass}>
+                  <select id="attach-guardrail" ref={selectRef} value={pick} onChange={(e) => setPick(e.target.value)} className={inputClass}>
                     <option value="">Choose a guardrail…</option>
                     {attachable.map((g) => (
                       <option key={g.id} value={g.id}>
@@ -161,6 +205,7 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
                   onClick={() => {
                     edit([...ids, pick])
                     setPick('')
+                    selectRef.current?.focus() // Attach is disabled again once the select resets
                   }}
                 >
                   Attach
@@ -182,6 +227,7 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
                       onClick={() => {
                         setDraft(null)
                         update.reset()
+                        pendingFocus.current = 'heading'
                       }}
                     >
                       Discard

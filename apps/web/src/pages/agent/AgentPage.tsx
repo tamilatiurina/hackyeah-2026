@@ -1,6 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { useAgent, useDeleteAgent } from '../../api/agents'
+import { agentKeys, useAgent, useDeleteAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { AgentGuardrails } from './AgentGuardrails'
@@ -21,6 +22,7 @@ export function AgentPage() {
   }, [editing])
 
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const remove = useDeleteAgent()
   const [confirming, setConfirming] = useState(false)
   useEffect(() => {
@@ -81,7 +83,16 @@ export function AgentPage() {
                   autoFocus
                   disabled={remove.isPending}
                   onBlur={() => setConfirming(false)}
-                  onClick={() => remove.mutate(agent.data.id, { onSuccess: () => navigate('/agents') })}
+                  onClick={() =>
+                    remove.mutate(agent.data.id, {
+                      onSuccess: (_, id) => {
+                        navigate('/agents')
+                        // After leaving the page (removing it while mounted would refetch → 404 flash),
+                        // so browser Back doesn't show the deleted agent from cache.
+                        setTimeout(() => queryClient.removeQueries({ queryKey: agentKeys.agent(id), exact: true }))
+                      },
+                    })
+                  }
                   className={`${buttonSecondary} border-danger text-danger`}
                 >
                   Confirm delete

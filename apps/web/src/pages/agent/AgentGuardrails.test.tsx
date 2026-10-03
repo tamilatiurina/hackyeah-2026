@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { fakeApi } from '../../test/fakeApi'
@@ -113,5 +113,45 @@ describe('Agent guardrails', () => {
     await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
     await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
     expect(await within(section()).findByText("Attaching guardrails isn't available on this API yet.")).toBeInTheDocument()
+  })
+
+  it('never lists or re-sends a mandatory guardrail found in attached_rules', async () => {
+    fakeApi.agents[0] = {
+      ...fakeApi.agents[0],
+      attached_rules: [
+        { rule_id: 'gr-injection', rule_type: 'guardrail', order_index: 0 },
+        { rule_id: 'gr-pii', rule_type: 'guardrail', order_index: 1 },
+      ],
+    }
+    const user = await open()
+    expect(attachedNames()).toEqual(['PII redaction'])
+    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
+    await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
+    await within(section()).findByText('No guardrails attached. Only the mandatory ones run.')
+    expect(fakeApi.lastAgentUpdate).toEqual({ attached_rules: [] })
+  })
+
+  it('keeps keyboard focus in the section after each action', async () => {
+    const user = await open()
+    const heading = () => within(section()).getByRole('heading', { name: 'Attached guardrails' })
+    await user.selectOptions(within(section()).getByLabelText('Attach guardrail'), 'Toxicity filter')
+    await user.click(within(section()).getByRole('button', { name: 'Attach' }))
+    expect(within(section()).getByLabelText('Attach guardrail')).toHaveFocus()
+    await user.click(within(section()).getByRole('button', { name: 'Move Toxicity filter up' }))
+    await waitFor(() => expect(within(section()).getByRole('button', { name: 'Move Toxicity filter down' })).toHaveFocus())
+    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
+    await waitFor(() => expect(heading()).toHaveFocus())
+    await user.click(within(section()).getByRole('button', { name: 'Save guardrails' }))
+    expect(await within(section()).findByText('Guardrails saved')).toBeInTheDocument()
+    await waitFor(() => expect(heading()).toHaveFocus())
+  })
+
+  it('returns focus to the list heading after Discard', async () => {
+    const user = await open()
+    await user.click(within(section()).getByRole('button', { name: 'Remove PII redaction' }))
+    await user.click(within(section()).getByRole('button', { name: 'Discard' }))
+    await waitFor(() =>
+      expect(within(section()).getByRole('heading', { name: 'Attached guardrails' })).toHaveFocus(),
+    )
   })
 })
