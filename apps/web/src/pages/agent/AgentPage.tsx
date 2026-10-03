@@ -1,14 +1,23 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
-import { buttonSecondary } from '../../ui/classes'
+import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { AgentOverview } from './AgentOverview'
+import { EditAgentForm } from './EditAgentForm'
 
 const backLink = 'inline-flex min-h-11 items-center text-sm font-semibold no-underline'
 
 export function AgentPage() {
   const { agentId = '' } = useParams()
   const agent = useAgent(agentId)
+  const [editing, setEditing] = useState(false)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
+  const wasEditing = useRef(false)
+  useEffect(() => {
+    if (wasEditing.current && !editing) editButtonRef.current?.focus()
+    wasEditing.current = editing
+  }, [editing])
 
   if (agent.isPending) {
     return (
@@ -44,9 +53,22 @@ export function AgentPage() {
         <Link to="/agents" className={`${backLink} self-start`}>
           ← Agents
         </Link>
-        <h1 className="m-0 text-[28px] font-semibold tracking-tight break-words">{agent.data.name}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h1 className="m-0 text-[28px] font-semibold tracking-tight break-words">{agent.data.name}</h1>
+          {!editing && (
+            <div className="flex flex-wrap gap-2">
+              <button ref={editButtonRef} type="button" className={buttonPrimary} onClick={() => setEditing(true)}>
+                Edit
+              </button>
+            </div>
+          )}
+        </div>
       </header>
-      <AgentOverview agent={agent.data} />
+      {editing ? (
+        <EditAgentForm agent={agent.data} onClose={() => setEditing(false)} />
+      ) : (
+        <AgentOverview agent={agent.data} />
+      )}
     </section>
   )
 }

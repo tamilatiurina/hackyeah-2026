@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useRegisterAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
 import type { Agent, MessageFormat } from '../../api/types'
@@ -10,31 +10,15 @@ import {
   type AgentFormField,
 } from '../../api/validation'
 import { buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
+import { AgentFields, Field, UNREACHABLE, type AgentFieldValues } from './AgentFields'
 
 interface RegisterAgentFormProps {
   onClose: () => void
   onRegistered: (agent: Agent) => void
 }
 
-const UNREACHABLE = "Couldn't reach the upstream agent. Check the URL and that it answers GET requests."
 const card = 'flex flex-col gap-5 rounded-xl border border-line bg-surface p-5 sm:p-6'
-const labelClass = 'text-[13px] font-semibold text-[#30343B]'
 
-function Field({ id, label, error, children }: { id: string; label: string; error?: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className={labelClass}>
-        {label}
-      </label>
-      {children}
-      {error && (
-        <p id={`${id}-error`} className="m-0 text-[13px] text-danger">
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
 
 export function RegisterAgentForm({ onClose, onRegistered }: RegisterAgentFormProps) {
   const [form, setForm] = useState<AgentForm>({
@@ -106,67 +90,23 @@ export function RegisterAgentForm({ onClose, onRegistered }: RegisterAgentFormPr
         Register an agent
       </h2>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="reg-name" label="Name" error={errors.name}>
-          <input
-            id="reg-name"
-            ref={nameRef}
-            value={form.name}
-            maxLength={100}
-            placeholder="e.g. Billing Assistant"
-            onChange={(e) => set('name', e.target.value)}
-            {...invalid('name')}
-            className={inputClass}
-          />
-        </Field>
-        <Field id="reg-upstreamUrl" label="Upstream URL" error={errors.upstreamUrl}>
-          <input
-            id="reg-upstreamUrl"
-            type="url"
-            value={form.upstreamUrl}
-            placeholder="https://"
-            onChange={(e) => set('upstreamUrl', e.target.value)}
-            {...invalid('upstreamUrl')}
-            className={`${inputClass} font-mono`}
-          />
-        </Field>
-      </div>
-
-      <Field id="reg-description" label="Description" error={errors.description}>
-        <textarea
-          id="reg-description"
-          rows={2}
-          value={form.description}
-          onChange={(e) => set('description', e.target.value)}
-          {...invalid('description')}
-          className={`${inputClass} py-2`}
-        />
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="reg-request-format" label="Request format">
-          <select
-            id="reg-request-format"
-            value={requestFormat}
-            onChange={(e) => setRequestFormat(e.target.value as MessageFormat)}
-            className={inputClass}
-          >
-            <option value="json">JSON</option>
-            <option value="text">Text</option>
-          </select>
-        </Field>
-        <Field id="reg-response-format" label="Response format">
-          <select
-            id="reg-response-format"
-            value={responseFormat}
-            onChange={(e) => setResponseFormat(e.target.value as MessageFormat)}
-            className={inputClass}
-          >
-            <option value="json">JSON</option>
-            <option value="text">Text</option>
-          </select>
-        </Field>
-      </div>
+      <AgentFields
+        idPrefix="reg"
+        values={{
+          name: form.name,
+          description: form.description,
+          upstreamUrl: form.upstreamUrl,
+          requestFormat,
+          responseFormat,
+        }}
+        errors={errors}
+        nameRef={nameRef}
+        onChange={(field: keyof AgentFieldValues, value) => {
+          if (field === 'requestFormat') setRequestFormat(value as MessageFormat)
+          else if (field === 'responseFormat') setResponseFormat(value as MessageFormat)
+          else set(field, value)
+        }}
+      />
 
       <div className="flex flex-col gap-3">
         <label className="flex min-h-11 items-center gap-2 text-sm">
