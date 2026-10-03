@@ -1,5 +1,7 @@
 # Agent page (D-03, first slice) — design
 
+> **Update (A2A):** agents now speak A2A 1.0 ([docs/agent-contract-a2a.md](../../agent-contract-a2a.md)). `request_format` / `response_format` (JSON or text) and the GET ping on the upstream URL are replaced by fetching and storing the agent's Agent Card. The rest of this spec describes the code as built.
+
 Issue: #56 (D-03). Requirements: FR-02 (#9), FR-05 (#10), FR-06 (#11). Backend owners: Person 3
 (agent config; `fr-05-attached-dettached-policies-guardrails` defines `RuleAttachment`).
 Approved by the user on 2026-10-03.

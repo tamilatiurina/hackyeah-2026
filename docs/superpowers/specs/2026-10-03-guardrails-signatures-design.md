@@ -1,5 +1,7 @@
 # Guardrails and injection signatures (D-05, without policies) — design
 
+> **Update (A2A):** pi agents are now a separate feature. `packages/pi-control-layer/policy.json` stays only as the seed source for the injection signatures described here.
+
 Issue: #58 (D-05). Requirements: FR-03 (#2), FR-20 (#20), FR-31 (no issue). Backend counterpart: #35
 (A-03, guardrail and signature parts only). Builds on #72 (guardrail templates API) and #75
 (`/api/v1` prefix in the web client). Date: 2026-10-03.

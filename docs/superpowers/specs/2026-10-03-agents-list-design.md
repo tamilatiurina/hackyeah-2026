@@ -1,5 +1,7 @@
 # Agents list and registration (D-02) — design
 
+> **Update (A2A):** runtime (pi) agents are no longer part of this app; they move to a separate feature. Proxy agents speak A2A 1.0 ([docs/agent-contract-a2a.md](../../agent-contract-a2a.md)). This spec was already superseded by `2026-10-03-agents-real-data-design.md`.
+
 Issue: #55 (D-02 Agents list and registration). Requirements: FR-01 (#1), FR-13 (#4).
 Backend counterpart: #34 (A-02). Contract: #29 (T-02, not landed). Date: 2026-10-03.
 

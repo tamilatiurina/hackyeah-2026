@@ -7,7 +7,11 @@ Monorepo for the HackYeah 2026 project. The repo contains three applications and
 | `apps/api`      | Backend API (FastAPI)            | Python, uv workspace   |
 | `apps/cli`      | Command-line tool (Typer)        | Python, uv workspace   |
 | `apps/web`      | Frontend UI (React + Vite + TS)  | Node, pnpm             |
+| `apps/agents`   | Demo A2A agents (LLM or mock)    | Python, standalone     |
+| `apps/test-agent` | Deterministic A2A test agent | Python, uv workspace   |
 | `packages/core` | Shared Python code for API & CLI | Python, uv workspace   |
+
+Every agent speaks [A2A 1.0](https://a2a-protocol.org/v1.0.0/specification/); the hub's profile is in [`docs/agent-contract-a2a.md`](docs/agent-contract-a2a.md).
 
 All Python code lives in a single [uv](https://docs.astral.sh/uv/) workspace with **one `uv.lock`** and **one `.venv`** at the repo root. The web app is a separate pnpm project inside `apps/web`.
 
