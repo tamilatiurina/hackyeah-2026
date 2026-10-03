@@ -1,4 +1,6 @@
-.PHONY: install api web cli lint test
+.PHONY: install api web cli lint test supabase supabase-stop
+
+SUPABASE = pnpm dlx supabase@2.119.0
 
 install:
 	uv sync --all-packages
@@ -18,3 +20,10 @@ lint:
 
 test:
 	uv run pytest
+
+supabase:
+	$(SUPABASE) start --workdir apps/api
+	./scripts/supabase-env.sh
+
+supabase-stop:
+	$(SUPABASE) stop --workdir apps/api

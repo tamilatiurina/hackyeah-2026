@@ -69,8 +69,20 @@ All `make` commands are run from the **repo root**.
 | `make cli`  | Shows the CLI help                             | —                            |
 | `make lint` | Ruff lint + format check + mypy                | —                            |
 | `make test` | Runs pytest across all Python packages         | —                            |
+| `make supabase` | Starts local Supabase and writes env files | http://127.0.0.1:54323 (Studio) |
 
 Run the API and the web app in two separate terminals. During development the web app proxies every `/api/*` request to `http://localhost:8000`, so frontend code can call without any CORS setup.
+
+### Local Supabase (agents database)
+
+The agents API stores data in Supabase and needs a signed-in user. To run it locally you need Docker:
+
+```bash
+make supabase        # start the stack, apply apps/api/supabase/migrations, write env files, create a demo user
+make supabase-stop   # stop it (data is kept in Docker volumes)
+```
+
+`make supabase` writes `apps/api/.env` and `apps/web/.env.local` (gitignored) with the local URL and publishable key, and creates `demo@guardrail.local`; its password is in `apps/api/supabase/.env.demo`. Studio runs at http://127.0.0.1:54323. Re-run `./scripts/supabase-env.sh` if you only need the env files again.
 
 The CLI is installed as the `acme` command:
 
