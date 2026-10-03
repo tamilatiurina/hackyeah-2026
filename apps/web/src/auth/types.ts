@@ -2,6 +2,8 @@
 export interface AuthSession {
   accessToken: string
   email: string
+  /** A Supabase anonymous (guest) user. */
+  anonymous: boolean
 }
 
 export interface AuthClient {
@@ -11,5 +13,7 @@ export interface AuthClient {
   onAuthStateChange(callback: (session: AuthSession | null) => void): () => void
   /** Resolves to an error message, or null on success. */
   signIn(email: string, password: string): Promise<string | null>
+  /** Starts a guest session. Resolves to an error message, or null on success. */
+  signInAnonymously(): Promise<string | null>
   signOut(): Promise<void>
 }

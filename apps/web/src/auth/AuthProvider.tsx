@@ -8,13 +8,17 @@ interface AuthProviderProps {
   client: AuthClient | null
   /** Skips the async session lookup (tests). */
   initialSession?: AuthSession | null
+  /** Without a session, start a Supabase anonymous (guest) session instead of asking to sign in. */
+  guest?: boolean
   children: ReactNode
 }
 
-export function AuthProvider({ client, initialSession, children }: AuthProviderProps) {
+export function AuthProvider({ client, initialSession, guest = false, children }: AuthProviderProps) {
   const queryClient = useQueryClient()
   const [session, setSessionState] = useState<AuthSession | null>(initialSession ?? null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [guestError, setGuestError] = useState<string | null>(null)
+  const guestPending = useRef(false)
   const [status, setStatus] = useState<'loading' | 'ready'>(
     !client || initialSession !== undefined ? 'ready' : 'loading',
   )
@@ -52,6 +56,19 @@ export function AuthProvider({ client, initialSession, children }: AuthProviderP
       unsubscribe()
     }
   }, [client, initialSession, queryClient, setSession])
+
+  // Guest mode: whenever there is no session (first visit, expired guest), start a new guest session.
+  useEffect(() => {
+    if (!guest || !client || status !== 'ready' || session || guestError || guestPending.current) return
+    guestPending.current = true
+    setStatus('loading') // RequireAuth shows nothing meanwhile, so the sign-in page never flashes
+    void client.signInAnonymously().then(async (error) => {
+      if (error) setGuestError(error)
+      else setSession(await client.getSession())
+      guestPending.current = false
+      setStatus('ready')
+    })
+  }, [guest, client, status, session, guestError, setSession])
 
   const signOut = useCallback(async () => {
     setSession(null)
@@ -92,8 +109,15 @@ export function AuthProvider({ client, initialSession, children }: AuthProviderP
   )
 
   const value = useMemo<AuthState>(
-    () => ({ status, session, configured: client !== null, notice, signIn, signOut }),
-    [status, session, client, notice, signIn, signOut],
+    () => ({
+      status,
+      session,
+      configured: client !== null,
+      notice: notice ?? (guestError ? `Couldn't start a guest session: ${guestError}` : null),
+      signIn,
+      signOut,
+    }),
+    [status, session, client, notice, guestError, signIn, signOut],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

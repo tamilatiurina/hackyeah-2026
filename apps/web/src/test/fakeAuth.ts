@@ -9,11 +9,16 @@ export interface FakeAuth extends AuthClient {
   refreshCalls: number
 }
 
-export function createFakeAuth({ signedIn = true }: { signedIn?: boolean } = {}): FakeAuth {
+export const ANONYMOUS_DISABLED = 'Anonymous sign-ins are disabled'
+
+export function createFakeAuth({
+  signedIn = true,
+  anonymousEnabled = true,
+}: { signedIn?: boolean; anonymousEnabled?: boolean } = {}): FakeAuth {
   const listeners = new Set<(s: AuthSession | null) => void>()
   const emit = (s: AuthSession | null) => listeners.forEach((cb) => cb(s))
   const fake: FakeAuth = {
-    session: signedIn ? { accessToken: TEST_TOKEN, email: DEMO_EMAIL } : null,
+    session: signedIn ? { accessToken: TEST_TOKEN, email: DEMO_EMAIL, anonymous: false } : null,
     refreshCalls: 0,
     getSession: () => Promise.resolve(fake.session),
     async refreshSession() {
@@ -26,7 +31,13 @@ export function createFakeAuth({ signedIn = true }: { signedIn?: boolean } = {})
     },
     async signIn(email, password) {
       if (email !== DEMO_EMAIL || password !== DEMO_PASSWORD) return 'Invalid login credentials'
-      fake.session = { accessToken: TEST_TOKEN, email }
+      fake.session = { accessToken: TEST_TOKEN, email, anonymous: false }
+      emit(fake.session)
+      return null
+    },
+    async signInAnonymously() {
+      if (!anonymousEnabled) return ANONYMOUS_DISABLED
+      fake.session = { accessToken: TEST_TOKEN, email: '', anonymous: true }
       emit(fake.session)
       return null
     },

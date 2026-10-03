@@ -64,19 +64,21 @@ export function Sidebar({ id, open, onNavigate, counts = {} }: SidebarProps) {
       <div className="mt-auto flex flex-col gap-2 px-2">
         {session && (
           <div className="flex flex-col gap-2 border-b border-sidebar-track pb-4">
-            <span className="truncate text-xs text-sidebar-subtle" title={session.email}>
-              {session.email}
+            <span className="truncate text-xs text-sidebar-subtle" title={session.email || undefined}>
+              {session.anonymous ? 'Guest session' : session.email}
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                onNavigate()
-                void signOut()
-              }}
-              className="min-h-11 cursor-pointer rounded-lg border border-sidebar-track bg-transparent px-3 text-left text-sm font-medium text-sidebar-muted hover:bg-sidebar-active hover:text-white"
-            >
-              Sign out
-            </button>
+            {!session.anonymous && (
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigate()
+                  void signOut()
+                }}
+                className="min-h-11 cursor-pointer rounded-lg border border-sidebar-track bg-transparent px-3 text-left text-sm font-medium text-sidebar-muted hover:bg-sidebar-active hover:text-white"
+              >
+                Sign out
+              </button>
+            )}
           </div>
         )}
         <span id={`${id}-role-label`} className="text-xs tracking-[0.06em] text-sidebar-subtle uppercase">

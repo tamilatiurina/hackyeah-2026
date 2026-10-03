@@ -12,14 +12,25 @@ function LocationProbe() {
   return <div data-testid="location">{location.pathname + location.search}</div>
 }
 
-export function renderApp(path: string, role?: Role, { signedIn = true }: { signedIn?: boolean } = {}) {
+interface RenderOptions {
+  signedIn?: boolean
+  /** Start a guest session when signed out (the app's default; off in tests unless asked). */
+  guest?: boolean
+  anonymousEnabled?: boolean
+}
+
+export function renderApp(
+  path: string,
+  role?: Role,
+  { signedIn = true, guest = false, anonymousEnabled = true }: RenderOptions = {},
+) {
   if (role) localStorage.setItem(ROLE_STORAGE_KEY, role)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const auth = createFakeAuth({ signedIn })
+  const auth = createFakeAuth({ signedIn, anonymousEnabled })
   const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>
-        <AuthProvider client={auth} initialSession={auth.session}>
+        <AuthProvider client={auth} initialSession={auth.session} guest={guest}>
           <RoleProvider>
             <AppRoutes />
             <LocationProbe />
