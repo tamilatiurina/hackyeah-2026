@@ -6,6 +6,7 @@ import { AgentsPage } from '../pages/agents/AgentsPage'
 import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
 import { Placeholder } from '../pages/Placeholder'
 import { SignInPage } from '../pages/SignInPage'
+import { TestChatPage } from '../pages/test/TestChatPage'
 import { Layout } from './Layout'
 import { homeFor, navItemsFor } from './nav'
 import { useRole } from './role'
@@ -14,6 +15,7 @@ import { useRole } from './role'
 const PAGES: Partial<Record<string, ReactElement>> = {
   '/agents': <AgentsPage />,
   '/guardrails': <GuardrailsPage />,
+  '/test': <TestChatPage />,
 }
 
 export function AppRoutes() {

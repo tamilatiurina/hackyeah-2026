@@ -1,6 +1,7 @@
 // Test double for the real guardrail and signature endpoints in apps/api: same paths, shapes and
 // error format ({detail}). The browser never uses it — MSW bypasses these paths to the real API.
 import { http, HttpResponse } from 'msw'
+import type { SendMessageRequest, SendMessageResponse, TraceEntry } from '../api/a2a'
 import { apiPath } from '../api/client'
 import type {
   Agent,
@@ -108,6 +109,93 @@ function present(agent: Agent): Agent {
 
 const methodNotAllowed = () => detail(405, 'Method Not Allowed')
 
+const trace = (
+  name: string,
+  stage: TraceEntry['stage'],
+  verdict: TraceEntry['verdict'],
+  reason: string,
+  engine: TraceEntry['engine'] = 'regex',
+  simulated = false,
+): TraceEntry => ({
+  guardrailId: `gr-${name.toLowerCase().replace(/\W+/g, '-')}`,
+  guardrailName: name,
+  engine,
+  stage,
+  verdict,
+  reason,
+  latencyMs: 3,
+  ...(simulated ? { simulated } : {}),
+})
+
+const INJECTION_PASS = trace('Prompt injection detector', 'input', 'pass', 'No match')
+
+// Imitates the gateway in front of apps/test-agent (its triggers start the message).
+function fakeGateway(request: SendMessageRequest): SendMessageResponse {
+  const { message } = request.params
+  const text = message.parts.map((p) => ('text' in p ? p.text : '')).join('\n')
+  const contextId = message.contextId ?? 'ctx-new'
+  const usage = { inputTokens: text.split(/\s+/).length, outputTokens: 12, costUsd: 0.0002 }
+  const limits = [{ name: 'Session tokens', used: 24, max: 16000 }]
+  const reply = (replyText: string, runs: TraceEntry[]): SendMessageResponse => ({
+    jsonrpc: '2.0',
+    id: request.id,
+    result: {
+      message: {
+        messageId: `agent-${fakeApi.testChatRequests.length}`,
+        contextId,
+        role: 'ROLE_AGENT',
+        parts: [{ text: replyText }],
+        metadata: { guardrailHub: { trace: runs, usage, limits } },
+      },
+    },
+  })
+  const blocked = (stage: 'input' | 'output', runs: TraceEntry[], why: string): SendMessageResponse => ({
+    jsonrpc: '2.0',
+    id: request.id,
+    result: {
+      task: {
+        id: `blk-${fakeApi.testChatRequests.length}`,
+        contextId,
+        status: {
+          state: 'TASK_STATE_REJECTED',
+          message: { messageId: `agent-${fakeApi.testChatRequests.length}`, role: 'ROLE_AGENT', parts: [{ text: why }] },
+        },
+        metadata: { guardrailHub: { blocked: true, stage, trace: runs, usage, limits } },
+      },
+    },
+  })
+  switch (text.trim().split(/\s+/)[0]) {
+    case '#pii':
+      return reply('Reach me at [EMAIL] or [PHONE].', [
+        INJECTION_PASS,
+        trace('PII redaction', 'output', 'redact', 'Found EMAIL, PHONE', 'library'),
+      ])
+    case '#secret':
+      return reply('Use key [REDACTED].', [INJECTION_PASS, trace('Secret keys', 'output', 'redact', 'Matched /AKIA[0-9A-Z]{16}/')])
+    case '#inject':
+      return blocked(
+        'input',
+        [trace('Prompt injection detector', 'input', 'block', 'Matched injection signature: ignore-instructions')],
+        'Blocked by guardrail "Prompt injection detector": ignore-instructions signature matched.',
+      )
+    case '#toxic':
+      return blocked(
+        'output',
+        [INJECTION_PASS, trace('Toxicity filter', 'output', 'block', 'Simulated: Abusive language: idiot', 'moderation', true)],
+        'Blocked by guardrail "Toxicity filter".',
+      )
+    case '#offtopic':
+      return reply("Let's talk about elections and crypto.", [
+        INJECTION_PASS,
+        trace('Topic: orders and returns only', 'output', 'warn', 'Simulated: Mentions a denied topic: crypto', 'llm_judge', true),
+      ])
+    case '#error':
+      return { jsonrpc: '2.0', id: request.id, error: { code: -32603, message: 'Internal error' } }
+    default:
+      return reply(`You said: ${text}`, [INJECTION_PASS])
+  }
+}
+
 export const fakeApi: {
   guardrails: Guardrail[]
   signatures: InjectionSignature[]
@@ -117,6 +205,10 @@ export const fakeApi: {
   agentId: number
   agentsSupport: { update: boolean; delete: boolean; attachments: boolean }
   lastAgentUpdate: AgentUpdate | null
+  testChatSupported: boolean
+  flagsSupported: boolean
+  testChatRequests: SendMessageRequest[]
+  flags: unknown[]
 } = {
   guardrails: seedGuardrails(),
   signatures: seedSignatures(),
@@ -126,6 +218,10 @@ export const fakeApi: {
   agentId: 1,
   agentsSupport: { update: true, delete: true, attachments: true },
   lastAgentUpdate: null,
+  testChatSupported: true,
+  flagsSupported: true,
+  testChatRequests: [],
+  flags: [],
 }
 
 export function resetFakeApi(): void {
@@ -137,6 +233,10 @@ export function resetFakeApi(): void {
   fakeApi.agentId = 1
   fakeApi.agentsSupport = { update: true, delete: true, attachments: true }
   fakeApi.lastAgentUpdate = null
+  fakeApi.testChatSupported = true
+  fakeApi.flagsSupported = true
+  fakeApi.testChatRequests = []
+  fakeApi.flags = []
 }
 
 const detail = (status: number, message: string) => HttpResponse.json({ detail: message }, { status })
@@ -315,5 +415,20 @@ export const fakeApiHandlers = [
     if (!fakeApi.agents.some((a) => a.id === params.id)) return detail(404, 'Agent not found')
     fakeApi.agents = fakeApi.agents.filter((a) => a.id !== params.id)
     return new HttpResponse(null, { status: 204 })
+  }),
+  http.post(apiPath('/agents/:id/test-chat'), async ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    if (!fakeApi.testChatSupported) return detail(404, 'Not Found')
+    if (!fakeApi.agents.some((a) => a.id === params.id)) return detail(404, 'Agent not found')
+    const body = (await request.json()) as SendMessageRequest
+    fakeApi.testChatRequests.push(body)
+    return HttpResponse.json(fakeGateway(body))
+  }),
+
+  http.post(apiPath('/agents/:id/flags'), async ({ request }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    if (!fakeApi.flagsSupported) return detail(405, 'Method Not Allowed')
+    fakeApi.flags.push(await request.json())
+    return HttpResponse.json({ ok: true }, { status: 201 })
   }),
 ]
