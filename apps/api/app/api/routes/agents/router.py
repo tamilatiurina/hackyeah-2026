@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from postgrest.exceptions import APIError
 from postgrest.types import JSON
-from pydantic import ValidationError
+from pydantic import HttpUrl, ValidationError
 
 from app.api.routes.agents.deps import (
     AgentDatabase,
@@ -14,40 +14,99 @@ from app.api.routes.agents.deps import (
     get_agent_database,
     get_http_client,
 )
-from app.api.routes.agents.models import Agent, AgentList, AgentRegistration
+from app.api.routes.agents.models import (
+    AGENT_CARD_PATH,
+    Agent,
+    AgentCard,
+    AgentList,
+    AgentRegistration,
+)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
-_PUBLIC_AGENT_COLUMNS = (
-    "id,name,description,upstream_url,auth_header_name,request_format,response_format"
-)
+_PUBLIC_AGENT_COLUMNS = "id,name,description,base_url,upstream_url,auth_header_name,agent_card"
+_PUBLIC_FIELDS = set(_PUBLIC_AGENT_COLUMNS.split(","))
+_MAX_CARD_BYTES = 256_000
 
 
-def _public_agent(agent_id: str, registration: AgentRegistration) -> Agent:
-    return Agent(
-        id=agent_id,
-        name=registration.name,
-        description=registration.description,
-        upstream_url=registration.upstream_url,
-        auth_header_name=(
-            registration.auth_header.name if registration.auth_header is not None else None
-        ),
-        request_format=registration.request_format,
-        response_format=registration.response_format,
-    )
+def agent_card_url(base_url: HttpUrl) -> HttpUrl:
+    """Where an agent publishes its A2A Agent Card, relative to its base URL."""
+    url = str(base_url).rstrip("/")
+    if url.endswith(AGENT_CARD_PATH):
+        return HttpUrl(url)
+    return HttpUrl(url + AGENT_CARD_PATH)
+
+
+def _bad_card(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+
+
+async def fetch_agent_card(
+    client: httpx.AsyncClient,
+    base_url: HttpUrl,
+    headers: dict[str, str] | None,
+) -> tuple[AgentCard, dict[str, Any]]:
+    """Fetch and validate the agent's Agent Card; it must offer an A2A 1.0 JSON-RPC interface.
+
+    Returns the parsed card and the card exactly as served, for the stored snapshot.
+    """
+    url = agent_card_url(base_url)
+    upstream = await ensure_public_upstream(url)
+    try:
+        request = client.build_request(
+            "GET",
+            upstream.url,
+            headers={"Accept": "application/json", **(headers or {})},
+            extensions={"sni_hostname": upstream.sni_hostname},
+        )
+        request.headers["Host"] = upstream.host_header
+        response = await client.send(request)
+        response.raise_for_status()
+    except httpx.HTTPError as error:
+        raise _bad_card(f"Could not fetch the agent's A2A Agent Card from {url}") from error
+
+    if len(response.content) > _MAX_CARD_BYTES:
+        raise _bad_card("The Agent Card is too large")
+    try:
+        card = AgentCard.model_validate_json(response.content)
+    except ValidationError as error:
+        first = error.errors()[0]
+        location = ".".join(str(part) for part in first["loc"]) or "card"
+        raise _bad_card(f"The Agent Card is invalid: {location}: {first['msg']}") from error
+
+    interface = card.jsonrpc_interface()
+    if interface is None:
+        raise _bad_card("The Agent Card has no A2A 1.0 JSON-RPC interface")
+    try:
+        await ensure_public_upstream(interface.url)
+    except HTTPException as error:
+        raise _bad_card(
+            "The Agent Card's JSON-RPC endpoint must resolve only to public IP addresses"
+        ) from error
+    snapshot: dict[str, Any] = response.json()
+    return card, snapshot
 
 
 def _database_row(
     agent_id: str,
     owner_id: str,
     registration: AgentRegistration,
+    card: AgentCard,
+    snapshot: dict[str, Any],
 ) -> dict[str, JSON]:
+    interface = card.jsonrpc_interface()
+    assert interface is not None  # checked by fetch_agent_card
     return {
         "id": agent_id,
         "owner_id": owner_id,
-        "name": registration.name,
-        "description": registration.description,
-        "upstream_url": str(registration.upstream_url),
+        "name": registration.name if registration.name is not None else card.name[:100],
+        "description": (
+            registration.description
+            if registration.description is not None
+            else card.description[:1_000]
+        ),
+        "base_url": str(registration.base_url),
+        "upstream_url": str(interface.url),
         "auth_header_name": (
             registration.auth_header.name if registration.auth_header is not None else None
         ),
@@ -56,9 +115,12 @@ def _database_row(
             if registration.auth_header is not None
             else None
         ),
-        "request_format": registration.request_format.value,
-        "response_format": registration.response_format.value,
+        "agent_card": snapshot,
     }
+
+
+def _public_agent(row: dict[str, JSON]) -> Agent:
+    return Agent.model_validate({k: v for k, v in row.items() if k in _PUBLIC_FIELDS})
 
 
 def _database_error() -> HTTPException:
@@ -92,7 +154,6 @@ async def register_agent(
     database: Annotated[AgentDatabase, Depends(get_agent_database)],
 ) -> Agent:
     agent_id = str(uuid4())
-    upstream = await ensure_public_upstream(registration.upstream_url)
     headers = (
         {
             registration.auth_header.name: registration.auth_header.value.get_secret_value(),
@@ -100,24 +161,9 @@ async def register_agent(
         if registration.auth_header is not None
         else None
     )
+    card, snapshot = await fetch_agent_card(client, registration.base_url, headers)
 
-    try:
-        request = client.build_request(
-            "GET",
-            upstream.url,
-            headers=headers,
-            extensions={"sni_hostname": upstream.sni_hostname},
-        )
-        request.headers["Host"] = upstream.host_header
-        response = await client.send(request)
-        response.raise_for_status()
-    except httpx.HTTPError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Upstream agent did not respond successfully",
-        ) from error
-
-    row = _database_row(agent_id, database.owner_id, registration)
+    row = _database_row(agent_id, database.owner_id, registration, card, snapshot)
     try:
         await run_in_threadpool(lambda: database.client.table("agents").insert(row).execute())
     except APIError as error:
@@ -128,7 +174,7 @@ async def register_agent(
             detail="Could not save agent",
         ) from error
 
-    return _public_agent(agent_id, registration)
+    return _public_agent(row)
 
 
 @router.get("", response_model=AgentList)
