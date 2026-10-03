@@ -13,7 +13,8 @@ client = TestClient(app)
 BASE = "/api/v1/pi/policy"
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-EXAMPLE_POLICY = REPO_ROOT / ".pi" / "policy.json"
+# CI never has the gitignored live policy, so tests read the tracked seed policy.
+EXAMPLE_POLICY = REPO_ROOT / "packages" / "pi-control-layer" / "policy.json.example"
 SCHEMA_PATH = REPO_ROOT / "packages" / "pi-control-layer" / "policy.schema.json"
 
 
