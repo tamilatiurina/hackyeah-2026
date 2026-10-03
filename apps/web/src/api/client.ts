@@ -53,19 +53,22 @@ function errorFrom(status: number, data: unknown): ApiError {
 type ExtraHeaders = Record<string, string>
 
 let accessTokenProvider: () => string | null = () => null
-let unauthorizedHandler: (() => void) | null = null
+let unauthorizedHandler: ((canRetry: boolean) => Promise<boolean>) | null = null
 
 /** The auth layer supplies the current Supabase access token. */
 export function setAccessTokenProvider(provider: () => string | null): void {
   accessTokenProvider = provider
 }
 
-/** Called on any 401 (e.g. an expired session). */
-export function setUnauthorizedHandler(handler: (() => void) | null): void {
+/**
+ * Called on a 401. With canRetry, the handler may refresh the session and resolve true to have the
+ * request sent again once; otherwise (or when that fails) it signs the user out.
+ */
+export function setUnauthorizedHandler(handler: ((canRetry: boolean) => Promise<boolean>) | null): void {
   unauthorizedHandler = handler
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, canRetry = true): Promise<T> {
   // Resolve against the page origin so relative paths also work under Node's fetch in tests.
   const url = new URL(apiPath(path), window.location.origin)
   let response: Response
@@ -81,7 +84,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const text = await response.text()
   const data = text ? parseJson(text) : null
 
-  if (response.status === 401) unauthorizedHandler?.()
+  if (response.status === 401 && unauthorizedHandler) {
+    if (await unauthorizedHandler(canRetry)) return request<T>(path, init, false)
+  }
   if (!response.ok) throw errorFrom(response.status, data)
   // e.g. index.html served for /api by the SPA rewrite when the real API is missing
   if (data === undefined) throw new ApiError(response.status, 'Unexpected response from the server')

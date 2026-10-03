@@ -16,6 +16,10 @@ export function createAuthClient(): AuthClient | null {
       const { data } = await auth.getSession()
       return toSession(data.session)
     },
+    async refreshSession() {
+      const { data, error } = await auth.refreshSession()
+      return error ? null : toSession(data.session)
+    },
     onAuthStateChange(callback) {
       const { data } = auth.onAuthStateChange((_event, session) => callback(toSession(session)))
       return () => data.subscription.unsubscribe()
@@ -25,7 +29,8 @@ export function createAuthClient(): AuthClient | null {
       return error ? error.message : null
     },
     async signOut() {
-      await auth.signOut()
+      // Local: only this browser. A global sign-out would also revoke other devices' sessions.
+      await auth.signOut({ scope: 'local' })
     },
   }
 }

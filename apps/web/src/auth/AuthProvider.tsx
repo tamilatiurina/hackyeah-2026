@@ -41,12 +41,17 @@ export function AuthProvider({ client, initialSession, children }: AuthProviderP
         setStatus('ready')
       })
     }
-    const unsubscribe = client.onAuthStateChange(setSession)
+    const unsubscribe = client.onAuthStateChange((next) => {
+      // Signed out elsewhere (another tab, failed refresh) or a different user: drop their data.
+      const previous = sessionRef.current
+      if (!next || (previous && previous.email !== next.email)) queryClient.clear()
+      setSession(next)
+    })
     return () => {
       active = false
       unsubscribe()
     }
-  }, [client, initialSession, setSession])
+  }, [client, initialSession, queryClient, setSession])
 
   const signOut = useCallback(async () => {
     setSession(null)
@@ -56,13 +61,22 @@ export function AuthProvider({ client, initialSession, children }: AuthProviderP
 
   useLayoutEffect(() => {
     // RequireAuth does the redirect; navigating here as well would race it and lose the notice.
-    setUnauthorizedHandler(() => {
-      if (!sessionRef.current) return // already signed out: no loop
+    setUnauthorizedHandler(async (canRetry) => {
+      if (!sessionRef.current) return false // already signed out: no loop
+      if (canRetry && client) {
+        // Usually just an expired access token (e.g. after sleep): refresh and let the client retry.
+        const refreshed = await client.refreshSession()
+        if (refreshed) {
+          setSession(refreshed)
+          return true
+        }
+      }
       setNotice(SESSION_EXPIRED)
-      void signOut()
+      await signOut()
+      return false
     })
     return () => setUnauthorizedHandler(null)
-  }, [signOut])
+  }, [client, setSession, signOut])
 
   const signIn = useCallback(
     async (email: string, password: string) => {

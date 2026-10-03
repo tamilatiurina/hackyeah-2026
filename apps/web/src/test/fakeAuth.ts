@@ -6,6 +6,7 @@ export const TEST_TOKEN = 'test-token'
 
 export interface FakeAuth extends AuthClient {
   session: AuthSession | null
+  refreshCalls: number
 }
 
 export function createFakeAuth({ signedIn = true }: { signedIn?: boolean } = {}): FakeAuth {
@@ -13,7 +14,12 @@ export function createFakeAuth({ signedIn = true }: { signedIn?: boolean } = {})
   const emit = (s: AuthSession | null) => listeners.forEach((cb) => cb(s))
   const fake: FakeAuth = {
     session: signedIn ? { accessToken: TEST_TOKEN, email: DEMO_EMAIL } : null,
+    refreshCalls: 0,
     getSession: () => Promise.resolve(fake.session),
+    async refreshSession() {
+      fake.refreshCalls += 1
+      return fake.session
+    },
     onAuthStateChange(cb) {
       listeners.add(cb)
       return () => listeners.delete(cb)

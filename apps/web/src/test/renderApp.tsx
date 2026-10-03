@@ -28,5 +28,5 @@ export function renderApp(path: string, role?: Role, { signedIn = true }: { sign
       </MemoryRouter>
     </QueryClientProvider>,
   )
-  return { ...result, auth }
+  return { ...result, auth, queryClient }
 }

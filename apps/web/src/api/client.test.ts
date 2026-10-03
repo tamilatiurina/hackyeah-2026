@@ -145,8 +145,9 @@ describe('api client', () => {
   it('calls the unauthorized handler on 401', async () => {
     let called = 0
     server.use(http.get(apiPath('/private'), () => HttpResponse.json({ detail: 'nope' }, { status: 401 })))
-    setUnauthorizedHandler(() => {
+    setUnauthorizedHandler(async () => {
       called += 1
+      return false
     })
     await expect(getJson('/private')).rejects.toMatchObject({ status: 401 })
     expect(called).toBe(1)

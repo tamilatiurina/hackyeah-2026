@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router'
@@ -72,7 +72,7 @@ describe('sign-in', () => {
     renderApp('/agents')
     expect(await screen.findByText('Your session expired. Sign in again.')).toBeInTheDocument()
     expect(location()).toBe('/sign-in')
-    expect(calls).toBe(1)
+    expect(calls).toBe(2) // the request, then one retry after refreshing the session
   })
 
   it('redirects signed-in users away from /sign-in', () => {
@@ -107,6 +107,38 @@ describe('sign-in', () => {
     await signIn(user)
     await waitFor(() => expect(location()).toBe('/agents'))
     expect(auth.session?.email).toBe(DEMO_EMAIL)
+    expect(await screen.findByText('No agents yet. Register your first one.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Support Assistant' })).not.toBeInTheDocument()
+  })
+
+  it('refreshes an expired token and retries instead of signing out', async () => {
+    const seen: (string | null)[] = []
+    server.use(
+      http.get(
+        apiPath('/agents'),
+        ({ request }) => {
+          seen.push(request.headers.get('Authorization'))
+          return HttpResponse.json({ detail: 'Invalid Supabase access token' }, { status: 401 })
+        },
+        { once: true },
+      ),
+    )
+    const { auth } = renderApp('/agents')
+    expect(await screen.findByRole('link', { name: 'Support Assistant' })).toBeInTheDocument()
+    expect(location()).toBe('/agents')
+    expect(auth.refreshCalls).toBe(1)
+    expect(seen).toEqual([`Bearer ${TEST_TOKEN}`])
+  })
+
+  it('clears cached data when Supabase reports a sign-out from elsewhere', async () => {
+    const user = userEvent.setup()
+    const { auth, queryClient } = renderApp('/agents')
+    await screen.findByRole('link', { name: 'Support Assistant' })
+    await act(() => auth.signOut()) // e.g. signed out in another tab
+    await waitFor(() => expect(location()).toBe('/sign-in'))
+    expect(queryClient.getQueryData(['agents'])).toBeUndefined()
+    server.use(http.get(apiPath('/agents'), () => HttpResponse.json({ data: [], total: 0 })))
+    await signIn(user)
     expect(await screen.findByText('No agents yet. Register your first one.')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Support Assistant' })).not.toBeInTheDocument()
   })
