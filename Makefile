@@ -1,4 +1,4 @@
-.PHONY: install api web cli lint test supabase supabase-stop
+.PHONY: install api web cli test-agent lint test supabase supabase-stop
 
 SUPABASE = pnpm dlx supabase@2.119.0
 
@@ -14,6 +14,9 @@ web:
 
 cli:
 	uv run acme --help
+
+test-agent:
+	uv run acme-test-agent
 
 lint:
 	uv run ruff check . && uv run ruff format --check . && uv run mypy apps/cli packages
