@@ -5,6 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.audit.memory import reset_in_memory_audit  # noqa: E402  (needs the path above)
 from app.core.config import settings  # noqa: E402  (needs the path above)
 from app.mcp.repository import reset_in_memory_servers  # noqa: E402  (needs the path above)
 from app.store import reset_store  # noqa: E402  (needs the path above)
@@ -14,6 +15,7 @@ from app.store import reset_store  # noqa: E402  (needs the path above)
 def fresh_store() -> None:
     reset_store()
     reset_in_memory_servers()
+    reset_in_memory_audit()
 
 
 @pytest.fixture(autouse=True)
