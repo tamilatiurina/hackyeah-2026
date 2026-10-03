@@ -151,3 +151,14 @@ class GuardrailUpdate(BaseModel):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
+
+
+# --- injection signatures (policy.schema.json "regexRule" without replacement) ---
+class InjectionSignature(BaseModel):
+    id: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    regex: str = Field(min_length=1, max_length=500)
+
+    @field_validator("regex")
+    @classmethod
+    def must_compile(cls, v: str) -> str:
+        return _must_compile(v)

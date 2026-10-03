@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
+from typing import Annotated
 
+from fastapi import Header, HTTPException, status
 from supabase import Client
 
 from app.core.supabase import get_supabase as _get_supabase
@@ -13,3 +15,12 @@ def get_timestamp() -> str:
 def get_supabase() -> Client:
     """FastAPI dependency returning the shared Supabase client."""
     return _get_supabase()
+
+
+def require_admin(x_role: Annotated[str | None, Header()] = None) -> None:
+    """Stand-in for real auth (A-08): trusts the X-Role header sent by the panel."""
+    if x_role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can change injection signatures",
+        )

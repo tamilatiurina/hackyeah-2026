@@ -2,6 +2,7 @@
 
 from app.guardrails.models import (
     Guardrail,
+    InjectionSignature,
     LlmJudgeConfig,
     PiiConfig,
     PromptInjectionConfig,
@@ -82,5 +83,31 @@ def seed_guardrails() -> list[Guardrail]:
             stages=["output"],
             action="block",
             config=RegexConfig(template="regex", pattern=r"(?s)^.{2001,}$"),
+        ),
+    ]
+
+
+def seed_signatures() -> list[InjectionSignature]:
+    """Copy of policy.json defaults.injection.patterns (tests/test_seeds.py keeps it in sync)."""
+    return [
+        InjectionSignature(
+            id="ignore-instructions",
+            regex=r"(?i)ignore (all )?(previous|prior|above) (instructions|prompts|rules)",
+        ),
+        InjectionSignature(
+            id="system-prompt-override",
+            regex=r"""(?i)(system prompt|instructions)\s*[:=]\s*['"]""",
+        ),
+        InjectionSignature(
+            id="reveal-prompt",
+            regex=r"(?i)(reveal|print|repeat) (your )?(system prompt|instructions)",
+        ),
+        InjectionSignature(
+            id="tool-hijack",
+            regex=r"(?i)(run|execute)\s+the following (command|code)\s*:",
+        ),
+        InjectionSignature(
+            id="exfiltrate-data",
+            regex=r"(?i)(send|post|upload) (this|the|all) (data|file|content|credentials|keys) to",
         ),
     ]
