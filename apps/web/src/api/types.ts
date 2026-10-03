@@ -196,3 +196,76 @@ export interface McpServer {
   /** Agents using the server (filled in once FR-17 attaches servers to agents). */
   agents: number
 }
+
+// --- audit log and sessions (A-07, mirror apps/api/app/audit/models.py) ---
+
+export type AuditAction = 'block' | 'redact' | 'warn'
+export type AuditKind = 'guardrail' | 'limit'
+
+export interface AuditEvent {
+  id: string
+  at: string
+  agent_id: string
+  agent_name: string | null
+  context_id: string | null
+  rule_id: string
+  rule_name: string
+  kind: AuditKind
+  stage: 'input' | 'output' | null
+  action: AuditAction
+  config_version: string | null
+  details: string
+}
+
+export interface AuditEventPage {
+  data: AuditEvent[]
+  next_cursor: string | null
+}
+
+export interface AuditRule {
+  rule_id: string
+  rule_name: string
+  kind: AuditKind
+}
+
+export interface SessionLimit {
+  name: string
+  used: number
+  max: number
+  unit?: string | null
+}
+
+export interface AgentSession {
+  agent_id: string
+  agent_name: string | null
+  context_id: string
+  turns: number
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+  started_at: string
+  last_at: string
+  duration_seconds: number
+  status: 'active' | 'stopped'
+  stop_reason: string | null
+  events: number
+  /** Empty until B-05 (limits) exists. */
+  limits: SessionLimit[]
+}
+
+export interface SessionPage {
+  data: AgentSession[]
+  next_cursor: string | null
+}
+
+export interface AuditFilters {
+  agent_id?: string
+  rule_id?: string
+  action?: AuditAction
+  context_id?: string
+}
+
+export interface SessionFilters {
+  agent_id?: string
+  status?: 'active' | 'stopped'
+}

@@ -6,6 +6,8 @@ import { apiPath } from '../api/client'
 import type {
   Agent,
   AgentCard,
+  AgentSession,
+  AuditEvent,
   AgentRegistration,
   Binding,
   BindingCreate,
@@ -118,6 +120,31 @@ const signedIn = (request: Request) => request.headers.get('Authorization') === 
 const notAuthenticated = () => detail(401, 'Not authenticated')
 
 const methodNotAllowed = () => detail(405, 'Method Not Allowed')
+
+const T0 = Date.parse('2026-10-04T10:00:00Z')
+const at = (minutes: number) => new Date(T0 + minutes * 60_000).toISOString()
+
+function seedAuditEvents(): AuditEvent[] {
+  // newest first, like the API
+  const base = { agent_name: null, config_version: 'v-3f2a', stage: null } as const
+  return [
+    { ...base, id: 'ev-5', at: at(9), agent_id: 'agent-support', context_id: 'ctx-stopped', rule_id: 'maxSessionTokens', rule_name: 'Session tokens', kind: 'limit', action: 'block', details: 'Session token cap reached' },
+    { ...base, id: 'ev-4', at: at(8), agent_id: 'agent-support', context_id: 'ctx-stopped', rule_id: 'g-pii', rule_name: 'PII', kind: 'guardrail', stage: 'output', action: 'redact', details: 'Email address' },
+    { ...base, id: 'ev-3', at: at(6), agent_id: 'agent-contracts', context_id: 'ctx-contracts', rule_id: 'g-pii', rule_name: 'PII', kind: 'guardrail', stage: 'input', action: 'warn', details: 'Phone number' },
+    { ...base, id: 'ev-2', at: at(4), agent_id: 'agent-support', context_id: 'ctx-active', rule_id: 'g-inject', rule_name: 'Prompt injection', kind: 'guardrail', stage: 'input', action: 'block', details: 'Matched signature "ignore previous"' },
+    { ...base, id: 'ev-1', at: at(2), agent_id: 'agent-support', context_id: 'ctx-active', rule_id: 'g-pii', rule_name: 'PII', kind: 'guardrail', stage: 'output', action: 'redact', details: 'Card number' },
+  ]
+}
+
+function seedSessions(): AgentSession[] {
+  const base = { agent_name: null, cost_usd: 0, limits: [] }
+  return [
+    { ...base, agent_id: 'agent-support', context_id: 'ctx-stopped', turns: 6, input_tokens: 5200, output_tokens: 4800, started_at: at(0), last_at: at(9), duration_seconds: 540, status: 'stopped', stop_reason: 'Session token cap reached', events: 2,
+      limits: [{ name: 'Session tokens', used: 10000, max: 10000, unit: 'tokens' }] },
+    { ...base, agent_id: 'agent-contracts', context_id: 'ctx-contracts', turns: 2, input_tokens: 300, output_tokens: 120, started_at: at(5), last_at: at(6), duration_seconds: 60, status: 'active', stop_reason: null, events: 1 },
+    { ...base, agent_id: 'agent-support', context_id: 'ctx-active', turns: 3, input_tokens: 90, output_tokens: 75, started_at: at(1), last_at: at(4), duration_seconds: 180, status: 'active', stop_reason: null, events: 2 },
+  ]
+}
 
 function seedMcpServers(): McpServer[] {
   return [
@@ -265,6 +292,11 @@ export const fakeApi: {
   gatewayKeyCount: number
   mcpServers: McpServer[]
   lastMcpServerCreate: McpServerCreate | null
+  auditEvents: AuditEvent[]
+  sessions: AgentSession[]
+  auditSupported: boolean
+  auditPageSize: number
+  auditRequests: URL[]
 } = {
   guardrails: seedGuardrails(),
   signatures: seedSignatures(),
@@ -282,6 +314,11 @@ export const fakeApi: {
   gatewayKeyCount: 0,
   mcpServers: seedMcpServers(),
   lastMcpServerCreate: null,
+  auditEvents: seedAuditEvents(),
+  sessions: seedSessions(),
+  auditSupported: true,
+  auditPageSize: 50,
+  auditRequests: [],
   bindings: seedBindings(),
   bindingsSupported: true,
   bindingRequests: [],
@@ -309,6 +346,11 @@ export function resetFakeApi(): void {
   fakeApi.gatewayKeyCount = 0
   fakeApi.mcpServers = seedMcpServers()
   fakeApi.lastMcpServerCreate = null
+  fakeApi.auditEvents = seedAuditEvents()
+  fakeApi.sessions = seedSessions()
+  fakeApi.auditSupported = true
+  fakeApi.auditPageSize = 50
+  fakeApi.auditRequests = []
 }
 
 const detail = (status: number, message: string) => HttpResponse.json({ detail: message }, { status })
@@ -354,6 +396,13 @@ function fakeDryRun(body: DryRunRequest): DryRunResult {
 }
 
 const isAdmin = (request: Request) => request.headers.get('X-Role') === 'admin'
+
+function page<T>(rows: T[], params: URLSearchParams): { data: T[]; next_cursor: string | null } {
+  const start = Number(params.get('before') ?? 0)
+  const size = Number(params.get('limit')) || fakeApi.auditPageSize
+  const end = start + size
+  return { data: rows.slice(start, end), next_cursor: end < rows.length ? String(end) : null }
+}
 
 export const fakeApiHandlers = [
   http.get(apiPath('/guardrail-templates'), () => HttpResponse.json(FAKE_TEMPLATES)),
@@ -484,6 +533,36 @@ export const fakeApiHandlers = [
     fakeApi.agents = fakeApi.agents.filter((a) => a.id !== params.id)
     return new HttpResponse(null, { status: 204 })
   }),
+  http.get(apiPath('/audit-events'), ({ request }) => {
+    if (!fakeApi.auditSupported) return detail(404, 'Not Found')
+    const url = new URL(request.url)
+    fakeApi.auditRequests.push(url)
+    const p = url.searchParams
+    const rows = fakeApi.auditEvents.filter(
+      (e) =>
+        (!p.get('agent_id') || e.agent_id === p.get('agent_id')) &&
+        (!p.get('rule_id') || e.rule_id === p.get('rule_id')) &&
+        (!p.get('action') || e.action === p.get('action')) &&
+        (!p.get('context_id') || e.context_id === p.get('context_id')),
+    )
+    return HttpResponse.json(page(rows, p))
+  }),
+
+  http.get(apiPath('/audit-events/rules'), () => {
+    if (!fakeApi.auditSupported) return detail(404, 'Not Found')
+    const rules = new Map(fakeApi.auditEvents.map((e) => [e.rule_id, { rule_id: e.rule_id, rule_name: e.rule_name, kind: e.kind }]))
+    return HttpResponse.json([...rules.values()])
+  }),
+
+  http.get(apiPath('/sessions'), ({ request }) => {
+    if (!fakeApi.auditSupported) return detail(404, 'Not Found')
+    const p = new URL(request.url).searchParams
+    const rows = fakeApi.sessions.filter(
+      (s) => (!p.get('agent_id') || s.agent_id === p.get('agent_id')) && (!p.get('status') || s.status === p.get('status')),
+    )
+    return HttpResponse.json(page(rows, p))
+  }),
+
   http.get(apiPath('/mcp-servers'), () => HttpResponse.json(fakeApi.mcpServers)),
 
   http.post(apiPath('/mcp-servers'), async ({ request }) => {
