@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router'
-import { useAgent } from '../../api/agents'
+import { Link, useNavigate, useParams } from 'react-router'
+import { useAgent, useDeleteAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { AgentOverview } from './AgentOverview'
@@ -18,6 +18,20 @@ export function AgentPage() {
     if (wasEditing.current && !editing) editButtonRef.current?.focus()
     wasEditing.current = editing
   }, [editing])
+
+  const navigate = useNavigate()
+  const remove = useDeleteAgent()
+  const [confirming, setConfirming] = useState(false)
+  useEffect(() => {
+    if (!confirming) return
+    const timer = setTimeout(() => setConfirming(false), 5000)
+    return () => clearTimeout(timer)
+  }, [confirming])
+
+  const deleteError =
+    remove.error instanceof ApiError && remove.error.status === 405
+      ? "Deleting agents isn't available on this API yet."
+      : remove.error?.message
 
   if (agent.isPending) {
     return (
@@ -60,9 +74,30 @@ export function AgentPage() {
               <button ref={editButtonRef} type="button" className={buttonPrimary} onClick={() => setEditing(true)}>
                 Edit
               </button>
+              {confirming ? (
+                <button
+                  type="button"
+                  autoFocus
+                  disabled={remove.isPending}
+                  onBlur={() => setConfirming(false)}
+                  onClick={() => remove.mutate(agent.data.id, { onSuccess: () => navigate('/agents') })}
+                  className={`${buttonSecondary} border-danger text-danger`}
+                >
+                  Confirm delete
+                </button>
+              ) : (
+                <button type="button" className={buttonSecondary} onClick={() => setConfirming(true)}>
+                  Delete
+                </button>
+              )}
             </div>
           )}
         </div>
+        {deleteError && (
+          <p role="alert" className="m-0 text-sm text-danger">
+            {deleteError}
+          </p>
+        )}
       </header>
       {editing ? (
         <EditAgentForm agent={agent.data} onClose={() => setEditing(false)} />
