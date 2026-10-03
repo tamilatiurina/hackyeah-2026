@@ -2,83 +2,51 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
+import { apiPath } from '../../api/client'
 import { renderApp } from '../../test/renderApp'
 import { server } from '../../test/server'
-import { apiPath } from '../../api/client'
 
-const table = () => screen.getByRole('table')
-const agentNames = () =>
-  within(table())
-    .getAllByRole('link')
-    .map((a) => a.textContent)
 const rowOf = (name: string) => screen.getByRole('link', { name }).closest('tr') as HTMLElement
-const location = () => screen.getByTestId('location').textContent
 
 describe('AgentsPage', () => {
-  it('lists all seed agents with their status and endpoint', async () => {
+  it('lists the signed-in user’s agents from the API', async () => {
     renderApp('/agents')
     await screen.findByRole('link', { name: 'Support Assistant' })
-    expect(agentNames()).toEqual([
-      'dev-agent',
-      'demo-agent',
-      'readonly-agent',
-      'Support Assistant',
-      'Returns Bot',
-      'Contract Summarizer',
-      'HR Policy Q&A',
-    ])
-    expect(within(rowOf('Support Assistant')).getByText('Deployed · v4')).toBeInTheDocument()
-    expect(within(rowOf('Support Assistant')).getByText('https://support-agent.acme.internal/api/chat')).toBeInTheDocument()
-    expect(within(rowOf('Support Assistant')).getByText('Customer Service')).toBeInTheDocument()
-    expect(within(rowOf('Returns Bot')).getByText('Draft')).toBeInTheDocument()
-    expect(within(rowOf('dev-agent')).getByText('Online')).toBeInTheDocument()
-    expect(within(rowOf('dev-agent')).getByText('WebSocket · connected')).toBeInTheDocument()
-    expect(within(rowOf('readonly-agent')).getByText('Offline')).toBeInTheDocument()
-    expect(within(rowOf('readonly-agent')).getByText('WebSocket · last seen 12 min ago')).toBeInTheDocument()
-    expect(rowOf('dev-agent').querySelector('a')).toHaveAttribute('href', '/agents/dev-agent')
+    const support = within(rowOf('Support Assistant'))
+    expect(support.getByText('Answers order questions.')).toBeInTheDocument()
+    expect(support.getByText('https://support-agent.acme.example/api/chat')).toBeInTheDocument()
+    expect(support.getByText('JSON → JSON')).toBeInTheDocument()
+    expect(support.getByText('Authorization')).toBeInTheDocument()
+    const contracts = within(rowOf('Contract Summarizer'))
+    expect(contracts.getByText('—')).toBeInTheDocument()
+    expect(contracts.getByText('Text → Text')).toBeInTheDocument()
+    expect(contracts.getByText('None')).toBeInTheDocument()
+    expect(rowOf('Support Assistant').querySelector('a')).toHaveAttribute('href', '/agents/agent-support')
   })
 
-  it('filters by group and keeps the choice in the URL', async () => {
-    const user = userEvent.setup()
+  it('has no group filter or runtime columns any more', async () => {
     renderApp('/agents')
     await screen.findByRole('link', { name: 'Support Assistant' })
-    await user.click(screen.getByRole('button', { name: 'Legal' }))
-    expect(agentNames()).toEqual(['Contract Summarizer'])
-    expect(location()).toBe('/agents?group=legal')
-    expect(screen.getByRole('button', { name: 'Legal' })).toHaveAttribute('aria-pressed', 'true')
-    await user.click(screen.getByRole('button', { name: 'All' }))
-    expect(agentNames()).toHaveLength(7)
-    expect(location()).toBe('/agents')
+    expect(screen.queryByRole('group', { name: 'Filter by group' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
   })
 
-  it('opens filtered from a link', async () => {
-    renderApp('/agents?group=legal')
-    await screen.findByRole('link', { name: 'Contract Summarizer' })
-    expect(agentNames()).toEqual(['Contract Summarizer'])
-  })
-
-  it('treats an unknown group in the URL as All', async () => {
-    renderApp('/agents?group=nope')
-    await screen.findByRole('link', { name: 'Support Assistant' })
-    expect(agentNames()).toHaveLength(7)
-    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('shows an empty message for a group without agents', async () => {
-    server.use(
-      http.get(apiPath('/groups'), () => HttpResponse.json([{ id: 'finance', name: 'Finance' }])),
-    )
-    renderApp('/agents?group=finance')
-    expect(await screen.findByText('No agents in this group yet')).toBeInTheDocument()
+  it('shows the empty state', async () => {
+    server.use(http.get(apiPath('/agents'), () => HttpResponse.json({ data: [], total: 0 })))
+    renderApp('/agents')
+    expect(await screen.findByText('No agents yet. Register your first one.')).toBeInTheDocument()
   })
 
   it('shows an error with a working Retry', async () => {
     const user = userEvent.setup()
     server.use(
-      http.get(apiPath('/agents'), () => HttpResponse.json({ message: 'boom' }, { status: 500 }), { once: true }),
+      http.get(apiPath('/agents'), () => HttpResponse.json({ detail: 'Could not read agents' }, { status: 503 }), {
+        once: true,
+      }),
     )
     renderApp('/agents')
     expect(await screen.findByText("Couldn't load agents.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Register agent' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('link', { name: 'Support Assistant' })).toBeInTheDocument()
   })

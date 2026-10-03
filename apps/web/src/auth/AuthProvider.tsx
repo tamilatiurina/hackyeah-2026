@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { setAccessTokenProvider, setUnauthorizedHandler } from '../api/client'
 import { AuthContext, SESSION_EXPIRED, type AuthState } from './context'
 import type { AuthClient, AuthSession } from './types'
@@ -26,7 +26,8 @@ export function AuthProvider({ client, initialSession, children }: AuthProviderP
     setSessionState(next)
   }, [])
 
-  useEffect(() => {
+  // Layout effects run before any child's passive effects, so the first query already has these.
+  useLayoutEffect(() => {
     setAccessTokenProvider(() => sessionRef.current?.accessToken ?? null)
   }, [])
 
@@ -53,7 +54,7 @@ export function AuthProvider({ client, initialSession, children }: AuthProviderP
     await client?.signOut()
   }, [client, queryClient, setSession])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // RequireAuth does the redirect; navigating here as well would race it and lose the notice.
     setUnauthorizedHandler(() => {
       if (!sessionRef.current) return // already signed out: no loop

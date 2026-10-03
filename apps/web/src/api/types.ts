@@ -1,52 +1,29 @@
-// Hand-written until T-02 (#29) lands; replace with the types generated from the OpenAPI spec.
+// Agents: mirror apps/api/app/api/routes/agents/models.py
 
-export interface Group {
+export type MessageFormat = 'json' | 'text'
+
+export interface Agent {
   id: string
   name: string
+  description: string
+  upstream_url: string
+  auth_header_name: string | null
+  request_format: MessageFormat
+  response_format: MessageFormat
 }
 
-export type AgentMode = 'proxy' | 'runtime'
-
-interface AgentBase {
-  id: string
+export interface AgentRegistration {
   name: string
-  groupId: string
-  owner: string
-  ruleCount: number
+  description: string
+  upstream_url: string
+  auth_header: { name: string; value: string } | null
+  request_format: MessageFormat
+  response_format: MessageFormat
 }
 
-export interface ProxyAgent extends AgentBase {
-  mode: 'proxy'
-  upstreamUrl: string
-  status: 'draft' | 'deployed'
-  version: number | null
-}
-
-export interface RuntimeAgent extends AgentBase {
-  mode: 'runtime'
-  online: boolean
-  lastSeenAt: string | null // ISO 8601
-}
-
-export type Agent = ProxyAgent | RuntimeAgent
-
-export interface RegisterAgentInput {
-  mode: AgentMode
-  name: string
-  groupId: string
-  owner: string
-  upstreamUrl?: string // required when mode is 'proxy'
-}
-
-export interface ConnectionResult {
-  reachable: boolean
-  latencyMs?: number
-  error?: string
-}
-
-export interface ApiErrorBody {
-  message: string
-  field?: string
+export interface AgentList {
+  data: Agent[]
+  total: number
 }
 
 // --- guardrails and injection signatures (mirror apps/api/app/guardrails/models.py) ---

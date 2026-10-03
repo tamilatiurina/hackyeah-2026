@@ -1,22 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Agent } from '../../api/types'
-import { badgeClass, pillClass } from '../../ui/classes'
-import { endpointLabel, statusOf, type Tone } from './agentDisplay'
+import { formatLabel } from './agentDisplay'
 
-const HEADERS = ['Agent', 'Mode', 'Group', 'Endpoint', 'Rules', 'Status', 'Owner']
-
-const TONE: Record<Tone, string> = {
-  ok: 'bg-teal-soft text-teal-dark',
-  neutral: 'bg-[#F0F0EB] text-[#30343B]',
-  warn: 'bg-warn-bg text-warn-fg',
-}
-
-const MODE: Record<Agent['mode'], { label: string; className: string }> = {
-  proxy: { label: 'Proxy', className: 'bg-[#F0F0EB] text-[#30343B]' },
-  runtime: { label: 'Runtime', className: 'bg-[#E6E9F5] text-[#2E3A6B]' },
-}
-
+const HEADERS = ['Agent', 'Description', 'Endpoint', 'Formats', 'Auth header']
 const cell = 'px-4 py-3 align-middle'
 
 function TableFrame({ children, busy = false }: { children: ReactNode; busy?: boolean }) {
@@ -44,19 +31,10 @@ function TableFrame({ children, busy = false }: { children: ReactNode; busy?: bo
   )
 }
 
-interface AgentsTableProps {
-  agents: readonly Agent[]
-  groupName: (groupId: string) => string
-  highlightId: string | null
-}
-
-export function AgentsTable({ agents, groupName, highlightId }: AgentsTableProps) {
-  // Read once per mount: "last seen N min ago" doesn't need to tick while the page is open.
-  const [now] = useState(Date.now)
+export function AgentsTable({ agents, highlightId }: { agents: readonly Agent[]; highlightId: string | null }) {
   return (
     <TableFrame>
       {agents.map((agent) => {
-        const status = statusOf(agent)
         const highlighted = agent.id === highlightId
         return (
           <tr
@@ -69,18 +47,14 @@ export function AgentsTable({ agents, groupName, highlightId }: AgentsTableProps
                 {agent.name}
               </Link>
             </td>
-            <td className={cell}>
-              <span className={`${badgeClass} ${MODE[agent.mode].className}`}>{MODE[agent.mode].label}</span>
+            <td className={`${cell} max-w-72 text-muted`}>{agent.description || '—'}</td>
+            <td className={`${cell} font-mono text-[13px] break-all text-muted`}>{agent.upstream_url}</td>
+            <td className={`${cell} whitespace-nowrap`}>
+              {formatLabel(agent.request_format)} → {formatLabel(agent.response_format)}
             </td>
-            <td className={cell}>{groupName(agent.groupId)}</td>
-            <td className={`${cell} text-muted ${agent.mode === 'proxy' ? 'font-mono text-[13px] break-all' : ''}`}>
-              {endpointLabel(agent, now)}
+            <td className={`${cell} ${agent.auth_header_name ? 'font-mono text-[13px]' : 'text-muted'}`}>
+              {agent.auth_header_name ?? 'None'}
             </td>
-            <td className={cell}>{agent.ruleCount}</td>
-            <td className={cell}>
-              <span className={`${pillClass} ${TONE[status.tone]}`}>{status.label}</span>
-            </td>
-            <td className={`${cell} font-mono text-[13px] text-muted`}>{agent.owner}</td>
           </tr>
         )
       })}
