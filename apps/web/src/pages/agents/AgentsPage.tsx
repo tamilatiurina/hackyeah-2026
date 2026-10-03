@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAgents } from '../../api/agents'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { AgentsTable, AgentsTableSkeleton } from './AgentsTable'
+import { RegisterAgentForm } from './RegisterAgentForm'
 
 export function AgentsPage() {
   const agents = useAgents()
@@ -65,6 +66,9 @@ export function AgentsPage() {
           </button>
         )}
       </header>
+      {registering && (
+        <RegisterAgentForm onClose={() => setRegistering(false)} onRegistered={(agent) => setHighlightId(agent.id)} />
+      )}
       {content}
     </section>
   )
