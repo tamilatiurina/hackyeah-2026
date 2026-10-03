@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useCreateGroup } from '../../api/agents'
 import type { Group } from '../../api/types'
 import { buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
@@ -18,6 +18,13 @@ export function GroupChips({ groups, selectedId, onSelect }: GroupChipsProps) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const createGroup = useCreateGroup()
+  const newGroupButtonRef = useRef<HTMLButtonElement>(null)
+  const wasAdding = useRef(false)
+
+  useEffect(() => {
+    if (wasAdding.current && !adding) newGroupButtonRef.current?.focus()
+    wasAdding.current = adding
+  }, [adding])
   const chips: { id: string | null; name: string }[] = [{ id: null, name: 'All' }, ...groups]
 
   const close = () => {
@@ -83,6 +90,7 @@ export function GroupChips({ groups, selectedId, onSelect }: GroupChipsProps) {
         </form>
       ) : (
         <button
+          ref={newGroupButtonRef}
           type="button"
           onClick={() => setAdding(true)}
           className="min-h-11 cursor-pointer rounded-full border border-dashed border-line-strong bg-transparent px-4 text-sm font-medium text-muted hover:text-ink"

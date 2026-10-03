@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useAgents, useGroups } from '../../api/agents'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
@@ -12,6 +12,14 @@ export function AgentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [registering, setRegistering] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
+  const registerButtonRef = useRef<HTMLButtonElement>(null)
+  const wasRegistering = useRef(false)
+
+  // Give focus back to "Register agent" when the form closes (Cancel, Done or success).
+  useEffect(() => {
+    if (wasRegistering.current && !registering) registerButtonRef.current?.focus()
+    wasRegistering.current = registering
+  }, [registering])
 
   useEffect(() => {
     if (!highlightId) return
@@ -25,6 +33,8 @@ export function AgentsPage() {
   const selectGroup = (groupId: string | null) =>
     setSearchParams(groupId ? { group: groupId } : {}, { replace: true })
   const groupName = (groupId: string) => groupList.find((g) => g.id === groupId)?.name ?? groupId
+  // Registering needs the group list, and adding to an unloaded agents cache would hide the rest.
+  const loaded = agents.isSuccess && groups.isSuccess
   const rows = (agents.data ?? []).filter((a) => !selectedGroupId || a.groupId === selectedGroupId)
 
   let content
@@ -65,8 +75,13 @@ export function AgentsPage() {
             Proxy agents sit behind a guarded URL. Runtime agents run on pi and enforce the policy themselves.
           </p>
         </div>
-        {!registering && (
-          <button type="button" className={buttonPrimary} onClick={() => setRegistering(true)}>
+        {loaded && !registering && (
+          <button
+            ref={registerButtonRef}
+            type="button"
+            className={buttonPrimary}
+            onClick={() => setRegistering(true)}
+          >
             Register agent
           </button>
         )}
@@ -76,7 +91,11 @@ export function AgentsPage() {
           groups={groupList}
           defaultGroupId={selectedGroupId ?? groupList[0]?.id ?? ''}
           onClose={() => setRegistering(false)}
-          onRegistered={(agent) => setHighlightId(agent.id)}
+          onRegistered={(agent) => {
+            setHighlightId(agent.id)
+            // Keep the new row in view when it lands outside the current filter.
+            if (selectedGroupId && agent.groupId !== selectedGroupId) selectGroup(agent.groupId)
+          }}
         />
       )}
       <GroupChips groups={groupList} selectedId={selectedGroupId} onSelect={selectGroup} />

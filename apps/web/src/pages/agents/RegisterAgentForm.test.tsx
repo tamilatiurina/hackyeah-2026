@@ -7,8 +7,7 @@ import { renderApp } from '../../test/renderApp'
 async function openForm(path = '/agents') {
   const user = userEvent.setup()
   renderApp(path)
-  await screen.findByRole('table')
-  await user.click(screen.getByRole('button', { name: 'Register agent' }))
+  await user.click(await screen.findByRole('button', { name: 'Register agent' }))
   return user
 }
 

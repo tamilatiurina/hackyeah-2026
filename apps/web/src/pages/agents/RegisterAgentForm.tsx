@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { testConnection, useRegisterAgent } from '../../api/agents'
 import { ApiError } from '../../api/client'
 import type { Agent, AgentMode, ConnectionResult, Group, RegisterAgentInput, RuntimeAgent } from '../../api/types'
@@ -74,6 +74,16 @@ export function RegisterAgentForm({ groups, defaultGroupId, onClose, onRegistere
   const [testing, setTesting] = useState(false)
   const [registered, setRegistered] = useState<RuntimeAgent | null>(null)
   const register = useRegisterAgent()
+  const nameRef = useRef<HTMLInputElement>(null)
+  const doneHeadingRef = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    nameRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    if (registered) doneHeadingRef.current?.focus()
+  }, [registered])
 
   const isProxy = mode === 'proxy'
   const input: RegisterAgentInput = {
@@ -135,7 +145,7 @@ export function RegisterAgentForm({ groups, defaultGroupId, onClose, onRegistere
   if (registered) {
     return (
       <section aria-labelledby="register-done-title" className={card}>
-        <h2 id="register-done-title" className="m-0 text-lg font-semibold">
+        <h2 id="register-done-title" ref={doneHeadingRef} tabIndex={-1} className="m-0 text-lg font-semibold">
           {registered.name} registered
         </h2>
         <p className="m-0 text-sm text-muted">
@@ -184,6 +194,7 @@ export function RegisterAgentForm({ groups, defaultGroupId, onClose, onRegistere
         <Field id="reg-name" label="Name" error={errors.name}>
           <input
             id="reg-name"
+            ref={nameRef}
             value={name}
             placeholder={isProxy ? 'e.g. Billing Assistant' : 'e.g. billing-assistant'}
             onChange={(e) => edit('name', setName)(e.target.value)}
