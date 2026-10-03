@@ -5,6 +5,7 @@ import { apiPath } from '../api/client'
 import type {
   Agent,
   AgentRegistration,
+  AgentUpdate,
   DryRunRequest,
   DryRunResult,
   Guardrail,
@@ -46,6 +47,7 @@ function seedGuardrails(): Guardrail[] {
       action: 'block',
       config: { template: 'prompt_injection', use_company_signatures: true },
       enabled: true,
+      mandatory: true,
     },
     {
       id: 'gr-toxicity',
@@ -77,6 +79,8 @@ function seedAgents(): Agent[] {
       auth_header_name: 'Authorization',
       request_format: 'json',
       response_format: 'json',
+      config_version: 1,
+      attached_rules: [{ rule_id: 'gr-pii', rule_type: 'guardrail', order_index: 0 }],
     },
     {
       id: 'agent-contracts',
@@ -86,12 +90,23 @@ function seedAgents(): Agent[] {
       auth_header_name: null,
       request_format: 'text',
       response_format: 'text',
+      config_version: 1,
+      attached_rules: [],
     },
   ]
 }
 
 const signedIn = (request: Request) => request.headers.get('Authorization') === `Bearer ${TEST_TOKEN}`
 const notAuthenticated = () => detail(401, 'Not authenticated')
+
+// Shape the response like a backend that may not support attachments yet.
+function present(agent: Agent): Agent {
+  if (fakeApi.agentsSupport.attachments) return agent
+  const { attached_rules: _omit, ...rest } = agent
+  return rest
+}
+
+const methodNotAllowed = () => detail(405, 'Method Not Allowed')
 
 export const fakeApi: {
   guardrails: Guardrail[]
@@ -100,6 +115,8 @@ export const fakeApi: {
   agents: Agent[]
   lastAgentRegistration: AgentRegistration | null
   agentId: number
+  agentsSupport: { update: boolean; delete: boolean; attachments: boolean }
+  lastAgentUpdate: AgentUpdate | null
 } = {
   guardrails: seedGuardrails(),
   signatures: seedSignatures(),
@@ -107,6 +124,8 @@ export const fakeApi: {
   agents: seedAgents(),
   lastAgentRegistration: null,
   agentId: 1,
+  agentsSupport: { update: true, delete: true, attachments: true },
+  lastAgentUpdate: null,
 }
 
 export function resetFakeApi(): void {
@@ -116,6 +135,8 @@ export function resetFakeApi(): void {
   fakeApi.agents = seedAgents()
   fakeApi.lastAgentRegistration = null
   fakeApi.agentId = 1
+  fakeApi.agentsSupport = { update: true, delete: true, attachments: true }
+  fakeApi.lastAgentUpdate = null
 }
 
 const detail = (status: number, message: string) => HttpResponse.json({ detail: message }, { status })
@@ -219,7 +240,7 @@ export const fakeApiHandlers = [
 
   http.get(apiPath('/agents'), ({ request }) => {
     if (!signedIn(request)) return notAuthenticated()
-    return HttpResponse.json({ data: fakeApi.agents, total: fakeApi.agents.length })
+    return HttpResponse.json({ data: fakeApi.agents.map(present), total: fakeApi.agents.length })
   }),
 
   http.post(apiPath('/agents'), async ({ request }) => {
@@ -247,8 +268,52 @@ export const fakeApiHandlers = [
       auth_header_name: body.auth_header?.name ?? null,
       request_format: body.request_format,
       response_format: body.response_format,
+      config_version: 1,
+      attached_rules: [],
     }
     fakeApi.agents.unshift(agent)
     return HttpResponse.json(agent, { status: 201 })
+  }),
+
+  http.get(apiPath('/agents/:id'), ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    const agent = fakeApi.agents.find((a) => a.id === params.id)
+    return agent ? HttpResponse.json(present(agent)) : detail(404, 'Agent not found')
+  }),
+
+  http.patch(apiPath('/agents/:id'), async ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    if (!fakeApi.agentsSupport.update) return methodNotAllowed()
+    const index = fakeApi.agents.findIndex((a) => a.id === params.id)
+    if (index === -1) return detail(404, 'Agent not found')
+    const body = (await request.json()) as AgentUpdate
+    fakeApi.lastAgentUpdate = body
+    const current = fakeApi.agents[index]
+    if (body.name !== undefined && fakeApi.agents.some((a) => a.id !== current.id && a.name === body.name)) {
+      return detail(409, 'An agent with this name already exists')
+    }
+    if (body.upstream_url !== undefined && new URL(body.upstream_url).hostname.includes('unreachable')) {
+      return detail(502, 'Upstream agent did not respond successfully')
+    }
+    const { auth_header, attached_rules, ...fields } = body
+    const updated: Agent = {
+      ...current,
+      ...fields,
+      auth_header_name: auth_header === undefined ? current.auth_header_name : (auth_header?.name ?? null),
+      attached_rules: attached_rules
+        ? attached_rules.map((r, order_index) => ({ ...r, order_index }))
+        : current.attached_rules,
+      config_version: (current.config_version ?? 1) + 1,
+    }
+    fakeApi.agents[index] = updated
+    return HttpResponse.json(present(updated))
+  }),
+
+  http.delete(apiPath('/agents/:id'), ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    if (!fakeApi.agentsSupport.delete) return methodNotAllowed()
+    if (!fakeApi.agents.some((a) => a.id === params.id)) return detail(404, 'Agent not found')
+    fakeApi.agents = fakeApi.agents.filter((a) => a.id !== params.id)
+    return new HttpResponse(null, { status: 204 })
   }),
 ]

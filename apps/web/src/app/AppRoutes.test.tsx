@@ -34,9 +34,9 @@ describe('AppRoutes', () => {
     expect(location()).toBe('/fleet')
   })
 
-  it('keeps Agents active on an agent page', () => {
+  it('keeps Agents active on an agent page', async () => {
     renderApp('/agents/support-bot')
-    expect(screen.getByRole('heading', { level: 1, name: 'Agent' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Agent not found' })).toBeInTheDocument()
     expect(within(mainNav()).getByRole('link', { name: 'Agents' })).toHaveAttribute(
       'aria-current',
       'page',

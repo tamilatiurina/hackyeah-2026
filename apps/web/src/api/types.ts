@@ -10,6 +10,9 @@ export interface Agent {
   auth_header_name: string | null
   request_format: MessageFormat
   response_format: MessageFormat
+  /** Absent until the backend supports attachments (FR-05). */
+  attached_rules?: RuleAttachment[]
+  config_version?: number
 }
 
 export interface AgentRegistration {
@@ -24,6 +27,27 @@ export interface AgentRegistration {
 export interface AgentList {
   data: Agent[]
   total: number
+}
+
+export interface RuleAttachment {
+  rule_id: string
+  rule_type: 'guardrail' | 'policy'
+  order_index: number
+}
+
+export type AgentRuleRef = Pick<RuleAttachment, 'rule_id' | 'rule_type'>
+
+/** PATCH /agents/{id} body (proposed, docs/api-contract-agents.md). */
+export interface AgentUpdate {
+  name?: string
+  description?: string
+  upstream_url?: string
+  request_format?: MessageFormat
+  response_format?: MessageFormat
+  /** Object replaces, null removes, omitted keeps. */
+  auth_header?: { name: string; value: string } | null
+  /** Full list; array order is the execution order. */
+  attached_rules?: AgentRuleRef[]
 }
 
 // --- guardrails and injection signatures (mirror apps/api/app/guardrails/models.py) ---
@@ -63,6 +87,8 @@ export interface GuardrailCreate extends GuardrailRule {
 export interface Guardrail extends GuardrailCreate {
   id: string
   enabled: boolean
+  /** FR-06: applies to every agent; never listed in attached_rules. */
+  mandatory?: boolean
 }
 
 export interface GuardrailUpdate {

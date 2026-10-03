@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { RequireAuth } from '../auth/RequireAuth'
+import { AgentPage } from '../pages/agent/AgentPage'
 import { AgentsPage } from '../pages/agents/AgentsPage'
 import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
 import { Placeholder } from '../pages/Placeholder'
@@ -36,7 +37,7 @@ export function AppRoutes() {
           />
         ))}
         {role !== 'tester' && (
-          <Route path="/agents/:agentId" element={<Placeholder title="Agent" issue="D-03 / D-04" />} />
+          <Route path="/agents/:agentId" element={<AgentPage />} />
         )}
         <Route path="*" element={<Navigate to={homeFor(role)} replace />} />
       </Route>
