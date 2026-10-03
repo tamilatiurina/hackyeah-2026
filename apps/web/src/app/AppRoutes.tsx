@@ -7,6 +7,7 @@ import { AuditLogPage } from '../pages/audit/AuditLogPage'
 import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
 import { McpServersPage } from '../pages/mcp/McpServersPage'
 import { Placeholder } from '../pages/Placeholder'
+import { SessionsPage } from '../pages/sessions/SessionsPage'
 import { SignInPage } from '../pages/SignInPage'
 import { TestChatPage } from '../pages/test/TestChatPage'
 import { Layout } from './Layout'
@@ -19,6 +20,7 @@ const PAGES: Partial<Record<string, ReactElement>> = {
   '/audit': <AuditLogPage />,
   '/guardrails': <GuardrailsPage />,
   '/mcp': <McpServersPage />,
+  '/sessions': <SessionsPage />,
   '/test': <TestChatPage />,
 }
 
