@@ -47,7 +47,7 @@ function seedGuardrails(): Guardrail[] {
       action: 'block',
       config: { template: 'prompt_injection', use_company_signatures: true },
       enabled: true,
-      mandatory: true,
+      is_mandatory: true,
     },
     {
       id: 'gr-toxicity',

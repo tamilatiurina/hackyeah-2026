@@ -30,7 +30,7 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
   )
   const library = useMemo(() => guardrails.data ?? [], [guardrails.data])
   // Mandatory guardrails always run; they are never listed (or saved) as attachments.
-  const mandatoryIds = useMemo(() => new Set(library.filter((g) => g.mandatory).map((g) => g.id)), [library])
+  const mandatoryIds = useMemo(() => new Set(library.filter((g) => g.is_mandatory).map((g) => g.id)), [library])
   const savedIds = useMemo(
     () => rules.filter((r) => r.rule_type === 'guardrail' && !mandatoryIds.has(r.rule_id)).map((r) => r.rule_id),
     [rules, mandatoryIds],
@@ -41,8 +41,8 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
   const dirty = draft !== null && draft.join('\n') !== savedIds.join('\n')
 
   const byId = new Map(library.map((g) => [g.id, g]))
-  const mandatory = library.filter((g) => g.mandatory)
-  const attachable = library.filter((g) => g.enabled && !g.mandatory && !ids.includes(g.id))
+  const mandatory = library.filter((g) => g.is_mandatory)
+  const attachable = library.filter((g) => g.enabled && !g.is_mandatory && !ids.includes(g.id))
 
   const sectionRef = useRef<HTMLElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)

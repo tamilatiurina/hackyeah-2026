@@ -30,7 +30,7 @@ interface AgentUpdate {              // PATCH body; every field optional
 }
 
 // Guardrail gains:
-interface Guardrail { /* … */ mandatory?: boolean }  // applies to every agent; never stored in attached_rules
+interface Guardrail { /* … */ is_mandatory?: boolean }  // applies to every agent; never stored in attached_rules (field name from the merged fr-06 work)
 ```
 
 | Call | Success | Errors |

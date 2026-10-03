@@ -37,7 +37,7 @@ interface AgentUpdate {               // PATCH body, all optional
   auth_header?: { name: string; value: string } | null   // object = replace, null = remove, omitted = keep
   attached_rules?: { rule_id: string; rule_type: 'guardrail' }[]   // full list; array order = execution order
 }
-// Guardrail gains: mandatory?: boolean — applies to every agent, never listed in attached_rules.
+// Guardrail gains: is_mandatory?: boolean (named by the backend, fr-06) — applies to every agent, never listed in attached_rules.
 ```
 
 | Call | Success | Errors |
@@ -84,8 +84,8 @@ interface AgentUpdate {               // PATCH body, all optional
 
 - Heading "Guardrails"; loads the library with `useGuardrails()`.
 - If `attached_rules` is absent: "Attaching guardrails isn't available on this API yet." (still shows
-  the mandatory group when guardrails report `mandatory`).
-- **Always applied**: guardrails with `mandatory: true`, lock icon, badges (engine, stage, action),
+  the mandatory group when guardrails report `is_mandatory`).
+- **Always applied**: guardrails with `is_mandatory: true`, lock icon, badges (engine, stage, action),
   no controls.
 - **Attached** (`rule_type === 'guardrail'`, sorted by `order_index`): position number, name,
   badges, **Move up** / **Move down** (disabled at the ends), **Remove**. Unknown `rule_id` → "Unknown
@@ -101,13 +101,13 @@ interface AgentUpdate {               // PATCH body, all optional
 ## Data layer
 
 - `src/api/types.ts`: `RuleAttachment`, `AgentUpdate`; `Agent` gains optional `attached_rules`,
-  `config_version`; `Guardrail` gains optional `mandatory`.
+  `config_version`; `Guardrail` gains optional `is_mandatory`.
 - `src/api/agents.ts`: `useAgent(id)` (query `['agents', id]`), `useUpdateAgent(id)` (writes the
   detail cache and replaces the row in `['agents']`), `useDeleteAgent()` (removes from caches).
 - `src/test/fakeApi.ts`: `GET/PATCH/DELETE /agents/:id` with the contract's behaviour;
   `fakeApi.agentsSupport = { update: true, delete: true, attachments: true }` switches let tests
   simulate the current backend (405s, no `attached_rules`); guardrail seeds get one
-  `mandatory: true` guardrail.
+  `is_mandatory: true` guardrail.
 
 ## Testing
 

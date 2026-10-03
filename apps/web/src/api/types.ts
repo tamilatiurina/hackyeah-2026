@@ -88,7 +88,7 @@ export interface Guardrail extends GuardrailCreate {
   id: string
   enabled: boolean
   /** FR-06: applies to every agent; never listed in attached_rules. */
-  mandatory?: boolean
+  is_mandatory?: boolean
 }
 
 export interface GuardrailUpdate {
