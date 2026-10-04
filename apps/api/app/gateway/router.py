@@ -36,9 +36,17 @@ from fastapi.security import APIKeyHeader
 from pydantic import HttpUrl, ValidationError
 
 from app.api.routes.agents.deps import ensure_public_upstream
+from app.audit.models import AuditEventIn
 from app.audit.recorder import AuditRecorder, get_audit_recorder
 from app.gateway import a2a
-from app.gateway.pipeline import GuardrailEngine, LocalEngine, StageOutcome, dump_trace, run_stage
+from app.gateway.pipeline import (
+    GuardrailEngine,
+    LocalEngine,
+    StageOutcome,
+    TraceEntry,
+    dump_trace,
+    run_stage,
+)
 from app.gateway.policy import PolicyLoader, get_policy_loader, read_role
 from app.gateway.resolver import AgentResolver, get_agent_resolver
 
@@ -168,6 +176,7 @@ async def forward_to_agent(
     policy = await run_in_threadpool(policies.load, agent_id, key, role)
     guarded = bool(policy.input or policy.output)
     inbound = run_stage(policy.input, "input", [message], engine)
+    await _report_hits(recorder, agent_id, key, message, inbound.trace, policy.version)
     if inbound.blocked_reason is not None:
         return _blocked(rpc_id, message, "input", inbound, role)
     if guarded or stripped:
@@ -213,6 +222,7 @@ async def forward_to_agent(
     # --- B-02: output guardrails ---
     result = reply["result"]
     outbound = run_stage(policy.output, "output", a2a.reply_holders(result), engine)
+    await _report_hits(recorder, agent_id, key, message, outbound.trace, policy.version)
     trace = inbound.trace + outbound.trace
     if outbound.blocked_reason is not None:
         return _blocked(
@@ -243,6 +253,52 @@ async def _count_turn(
         )
     except Exception:  # noqa: BLE001 - audit storage must not break a successful call
         logger.warning("Could not record a turn for agent %s", agent_id, exc_info=True)
+
+
+async def _report_hits(
+    recorder: AuditRecorder,
+    agent_id: str,
+    key: str,
+    message: a2a.Json,
+    trace: list[TraceEntry],
+    config_version: str,
+) -> None:
+    """A-07: every block, redaction and warning goes to the audit log, with the guardrail and its
+    reason only (reasons name patterns, entities, signatures or topics, never the message text).
+    Failures never change the reply."""
+    if all(entry.verdict == "pass" for entry in trace):
+        return
+    context_id = message.get("contextId")
+    try:
+        events = [
+            AuditEventIn(
+                rule_id=entry.guardrail_id,
+                rule_name=entry.guardrail_name,
+                kind="guardrail",
+                stage=entry.stage,
+                action=entry.verdict,
+                config_version=config_version,
+                details=_audit_details(entry),
+            )
+            for entry in trace
+            if entry.verdict != "pass"
+        ]
+        await run_in_threadpool(
+            recorder.record_events,
+            agent_id,
+            key,
+            context_id if isinstance(context_id, str) and context_id else None,
+            events,
+        )
+    except Exception:  # noqa: BLE001 - audit storage must not break the call
+        logger.warning("Could not record audit events for agent %s", agent_id, exc_info=True)
+
+
+def _audit_details(entry: TraceEntry) -> str:
+    reason = entry.reason
+    if entry.simulated and not reason.startswith("Simulated"):
+        reason = f"Simulated: {reason}"  # never report a simulated verdict as a real one
+    return reason[:500]
 
 
 def _blocked(

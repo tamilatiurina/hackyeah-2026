@@ -142,7 +142,9 @@ No message content is stored: sessions hold counters, events hold the rule and a
 
 ### Reporting hits (B-02, B-05, B-06)
 
-The gateway already counts every forwarded turn and its tokens (`metadata.usage`) per `contextId`.
+The gateway already counts every forwarded turn and its tokens (`metadata.usage`) per `contextId`,
+and reports every guardrail block, redaction and warning from the B-02 pipeline (input hits right
+after the input stage, output hits after the output stage; passes are not logged).
 Report every block, redaction, warning and limit hit through the recorder, never by writing the
 tables directly:
 
