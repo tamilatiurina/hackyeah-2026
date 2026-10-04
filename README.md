@@ -71,7 +71,7 @@ All `make` commands are run from the **repo root**.
 | ----------- | ---------------------------------------------- | ---------------------------- |
 | `make api`  | Starts the API with auto-reload on port 8000   | http://localhost:8000/docs   |
 | `make web`  | Starts the Vite dev server                     | http://localhost:5173        |
-| `make landing` | Starts the Astro landing page (static). Set `PUBLIC_APP_URL` to change where "Open the app" points | http://localhost:4321 |
+| `make landing` | Starts the Astro landing page (static). "Open the app" always goes to the production app | http://localhost:4321 |
 | `make cli`  | Shows the CLI help                             | —                            |
 | `make lint` | Ruff lint + format check + mypy                | —                            |
 | `make test` | Runs pytest across all Python packages         | —                            |

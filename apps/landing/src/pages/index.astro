@@ -9,7 +9,8 @@ import OneUrl from '../components/OneUrl.astro'
 import Roles from '../components/Roles.astro'
 import Closing from '../components/Closing.astro'
 
-const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:5173'
+// Every "Open the app" button goes to the production web app, in every environment.
+const appUrl = 'https://hackyeah-2026-theta.vercel.app'
 ---
 
 <Base
