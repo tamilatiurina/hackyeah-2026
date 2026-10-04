@@ -199,3 +199,21 @@ def usage_tokens(reply: dict[str, Any]) -> tuple[int, int]:
         return min(max(int(value), 0), MAX_REPORTED_TOKENS)
 
     return count("inputTokens"), count("outputTokens")
+
+
+def parse_send_message(body: bytes) -> tuple[Json | None, Json]:
+    """The SendMessage call in `body`, or (None, the JSON-RPC error to answer with)."""
+    try:
+        call = json.loads(body)
+    except ValueError:
+        return None, rpc_error(None, PARSE_ERROR, "Body is not valid JSON")
+    if not isinstance(call, dict) or call.get("jsonrpc") != JSONRPC_VERSION:
+        return None, rpc_error(None, INVALID_REQUEST, "Expected a JSON-RPC 2.0 call")
+    rpc_id = call.get("id")
+    if call.get("method") != SEND_MESSAGE:
+        # Anything else would reach the agent without passing the guardrails.
+        return None, rpc_error(rpc_id, UNSUPPORTED_OPERATION, "Only SendMessage is supported")
+    params = call.get("params")
+    if not isinstance(params, dict) or not isinstance(params.get("message"), dict):
+        return None, rpc_error(rpc_id, INVALID_PARAMS, "params.message is required")
+    return call, {}

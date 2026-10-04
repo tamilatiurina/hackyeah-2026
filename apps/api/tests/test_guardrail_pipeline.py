@@ -18,6 +18,7 @@ from app.audit.recorder import InMemoryAuditRecorder, get_audit_recorder
 from app.bindings.models import Binding, EffectivePolicy
 from app.bindings.resolve import resolve
 from app.gateway import router as gateway_router
+from app.gateway import service as gateway_service
 from app.gateway.pipeline import LocalEngine, run_stage
 from app.gateway.policy import SupabasePolicyLoader, get_policy_loader
 from app.gateway.resolver import UpstreamTarget, get_agent_resolver
@@ -264,7 +265,7 @@ def gateway(monkeypatch: pytest.MonkeyPatch) -> Iterator[Recorder]:
         async with httpx.AsyncClient(transport=upstream) as c:
             yield c
 
-    monkeypatch.setattr(gateway_router, "ensure_public_upstream", allow)
+    monkeypatch.setattr(gateway_service, "ensure_public_upstream", allow)
     app.dependency_overrides[get_agent_resolver] = FixedResolver
     app.dependency_overrides[gateway_router.get_gateway_http_client] = http
     yield upstream

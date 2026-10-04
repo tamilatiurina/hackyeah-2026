@@ -28,6 +28,7 @@ from app.bindings.models import EffectivePolicy
 from app.bindings.resolve import resolve
 from app.gateway import a2a
 from app.gateway import router as gateway_router
+from app.gateway import service as gateway_service
 from app.gateway.keys import KEY_PREFIX, hash_key
 from app.gateway.policy import get_policy_loader
 from app.gateway.resolver import SupabaseAgentResolver, UpstreamTarget, get_agent_resolver
@@ -134,7 +135,7 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeResolver]:
             sni_hostname=original.host,
         )
 
-    monkeypatch.setattr(gateway_router, "ensure_public_upstream", allow_test_upstream)
+    monkeypatch.setattr(gateway_service, "ensure_public_upstream", allow_test_upstream)
     resolver = FakeResolver()
     app.dependency_overrides[get_agent_resolver] = lambda: resolver
     app.dependency_overrides[get_policy_loader] = NoGuardrails

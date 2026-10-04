@@ -15,17 +15,17 @@ POST /a/<agent id>
      B-02: input guardrails run on the user message first (a block answers without calling
      the agent; a redaction changes what it receives), output guardrails on the reply, and the
      trace goes in the reply's metadata.guardrailHub. With no guardrails at all, the call and
-     the reply pass through byte for byte.
+     the reply pass through byte for byte. The caller's role (params.metadata.guardrailHub.role,
+     or the demo's top-level role) selects role bindings and is reported in the hub data.
 
-After a successful forward the gateway counts the turn for the message's contextId (A-07).
+After a successful forward the gateway counts the turn for the message's contextId, and every
+block, redaction and warning is recorded as an audit event (A-07, B-06). The steps live in
+app.gateway.service, shared with the panel's test chat.
 
 The agent's id stands in for the deployment slug until deployments exist (B-03).
 """
 
-import json
-import logging
-from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 import httpx
@@ -33,47 +33,23 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
-from pydantic import HttpUrl, ValidationError
 
-from app.api.routes.agents.deps import ensure_public_upstream
-from app.audit.models import AuditEventIn
 from app.audit.recorder import AuditRecorder, get_audit_recorder
 from app.gateway import a2a
-from app.gateway.pipeline import (
-    GuardrailEngine,
-    LocalEngine,
-    StageOutcome,
-    TraceEntry,
-    dump_trace,
-    run_stage,
-)
+from app.gateway.pipeline import GuardrailEngine
 from app.gateway.policy import PolicyLoader, get_policy_loader, read_role
 from app.gateway.resolver import AgentResolver, get_agent_resolver
+from app.gateway.service import (
+    Audit,
+    get_gateway_http_client,
+    get_guardrail_engine,
+    send_guarded,
+)
 
-UPSTREAM_TIMEOUT_SECONDS = 30.0
+__all__ = ["get_gateway_http_client", "get_guardrail_engine", "router"]
 
-logger = logging.getLogger(__name__)
 router = APIRouter(tags=["gateway"])
 _api_key = APIKeyHeader(name=a2a.API_KEY_HEADER, auto_error=False)
-
-
-class UpstreamError(Exception):
-    """The upstream agent couldn't be reached or answered with something unusable."""
-
-    def __init__(self, message: str, reason: str | None = None) -> None:
-        super().__init__(message)
-        self.reason = reason
-
-
-async def get_gateway_http_client() -> AsyncIterator[httpx.AsyncClient]:
-    async with httpx.AsyncClient(
-        follow_redirects=False, timeout=UPSTREAM_TIMEOUT_SECONDS
-    ) as client:
-        yield client
-
-
-def get_guardrail_engine() -> GuardrailEngine:
-    return LocalEngine()
 
 
 def _is_uuid(value: str) -> bool:
@@ -90,36 +66,6 @@ def _unauthorized() -> HTTPException:
         "Invalid or missing gateway key",
         headers={"WWW-Authenticate": a2a.API_KEY_HEADER},
     )
-
-
-def _rpc_error(rpc_id: Any, code: int, message: str, reason: str | None = None) -> JSONResponse:
-    # JSON-RPC answers HTTP 200 even for errors; the outcome is in the body.
-    return JSONResponse(a2a.rpc_error(rpc_id, code, message, reason))
-
-
-async def _post_upstream(
-    client: httpx.AsyncClient, url: str, headers: dict[str, str], content: bytes
-) -> httpx.Response:
-    """One call to the upstream, after the SSRF check (public address only, IP pinned)."""
-    try:
-        upstream = await ensure_public_upstream(HttpUrl(url))
-    except (HTTPException, ValidationError) as error:
-        raise UpstreamError("Upstream address is not allowed") from error
-    request = client.build_request(
-        "POST",
-        upstream.url,
-        content=content,
-        headers=headers,
-        extensions={"sni_hostname": upstream.sni_hostname},
-    )
-    request.headers["Host"] = upstream.host_header
-    try:
-        # send() without stream=True reads the entire body: streamed replies are buffered.
-        return await client.send(request)
-    except httpx.TimeoutException as error:
-        raise UpstreamError("Upstream agent did not answer in time", "timeout") from error
-    except httpx.HTTPError as error:
-        raise UpstreamError("Upstream agent could not be reached", "unreachable") from error
 
 
 @router.get("/a/{agent_id}" + a2a.AGENT_CARD_PATH)
@@ -157,160 +103,25 @@ async def forward_to_agent(
 
     # --- only A2A SendMessage goes through ---
     body = await request.body()
-    try:
-        call = json.loads(body)
-    except ValueError:
-        return _rpc_error(None, a2a.PARSE_ERROR, "Body is not valid JSON")
-    if not isinstance(call, dict) or call.get("jsonrpc") != a2a.JSONRPC_VERSION:
-        return _rpc_error(None, a2a.INVALID_REQUEST, "Expected a JSON-RPC 2.0 call")
-    rpc_id = call.get("id")
-    if call.get("method") != a2a.SEND_MESSAGE:
-        return _rpc_error(rpc_id, a2a.UNSUPPORTED_OPERATION, "Only SendMessage is supported")
-    params = call.get("params")
-    if not isinstance(params, dict) or not isinstance(params.get("message"), dict):
-        return _rpc_error(rpc_id, a2a.INVALID_PARAMS, "params.message is required")
-    message = params["message"]
-    role, stripped = read_role(call)
+    call, error = a2a.parse_send_message(body)
+    if call is None:
+        return JSONResponse(error)  # JSON-RPC answers HTTP 200 even for errors
 
-    # --- B-02: input guardrails ---
+    role, stripped = read_role(call)  # role bindings apply; a demo top-level role is removed
+
     policy = await run_in_threadpool(policies.load, agent_id, key, role)
-    guarded = bool(policy.input or policy.output)
-    inbound = run_stage(policy.input, "input", [message], engine)
-    await _report_hits(recorder, agent_id, key, message, inbound.trace, policy.version)
-    if inbound.blocked_reason is not None:
-        return _blocked(rpc_id, message, "input", inbound, role)
-    if guarded or stripped:
-        body = json.dumps(call).encode()  # the call with any redactions, without demo fields
-
-    # --- forward to the agent's JSON-RPC endpoint ---
-    headers = {"Content-Type": "application/json", a2a.A2A_VERSION_HEADER: a2a.A2A_VERSION}
-    if target.auth_header_name and target.auth_header_value:
-        headers[target.auth_header_name] = target.auth_header_value
-    try:
-        response = await _post_upstream(client, target.upstream_url, headers, body)
-    except UpstreamError as error:
-        return _rpc_error(rpc_id, a2a.INTERNAL_ERROR, str(error), error.reason)
-    try:
-        reply = response.json()
-    except ValueError:  # e.g. a crash page or a plain-text 401 from the agent
-        return _rpc_error(
-            rpc_id,
-            a2a.INTERNAL_ERROR,
-            f"Upstream agent answered HTTP {response.status_code} without JSON-RPC",
-            "invalid_response",
-        )
-
-    if not isinstance(reply, dict) or (
-        "error" not in reply and not a2a.is_valid_send_message_result(reply.get("result"))
-    ):
-        return _rpc_error(
-            rpc_id,
-            a2a.INTERNAL_ERROR,
-            "Upstream agent returned an invalid response (a task must be finished)",
-            "invalid_response",
-        )
-    if "error" not in reply:
-        await _count_turn(recorder, agent_id, key, message, reply)
-    if not guarded or "error" in reply:
-        # A result with no guardrails, or the agent's own JSON-RPC error: byte for byte.
+    reply = await send_guarded(
+        call,
+        target=target,
+        policy=policy,
+        engine=engine,
+        client=client,
+        audit=Audit(recorder=recorder, agent_id=agent_id, key=key),
+        role=role,
+        raw_body=None if stripped else body,
+    )
+    if reply.raw is not None:  # the agent's answer, byte for byte
         return Response(
-            content=response.content,
-            status_code=response.status_code,
-            media_type=response.headers.get("content-type", "application/json"),
+            content=reply.raw, status_code=reply.status_code, media_type=reply.media_type
         )
-
-    # --- B-02: output guardrails ---
-    result = reply["result"]
-    outbound = run_stage(policy.output, "output", a2a.reply_holders(result), engine)
-    await _report_hits(recorder, agent_id, key, message, outbound.trace, policy.version)
-    trace = inbound.trace + outbound.trace
-    if outbound.blocked_reason is not None:
-        return _blocked(
-            rpc_id,
-            message,
-            "output",
-            StageOutcome(trace=trace, blocked_reason=outbound.blocked_reason),
-            role,
-        )
-    hub: dict[str, Any] = {"trace": dump_trace(trace), "policyVersion": policy.version}
-    if role is not None:
-        hub["role"] = role
-    a2a.add_hub_metadata(result, hub)
-    return JSONResponse(reply)
-
-
-async def _count_turn(
-    recorder: AuditRecorder, agent_id: str, key: str, message: a2a.Json, reply: a2a.Json
-) -> None:
-    """A-07: count the turn the agent answered (no content). Failures never change the reply."""
-    context_id = message.get("contextId")
-    if not isinstance(context_id, str) or not context_id:
-        return
-    try:
-        input_tokens, output_tokens = a2a.usage_tokens(reply)
-        await run_in_threadpool(
-            recorder.record_turn, agent_id, key, context_id, input_tokens, output_tokens, 0.0
-        )
-    except Exception:  # noqa: BLE001 - audit storage must not break a successful call
-        logger.warning("Could not record a turn for agent %s", agent_id, exc_info=True)
-
-
-async def _report_hits(
-    recorder: AuditRecorder,
-    agent_id: str,
-    key: str,
-    message: a2a.Json,
-    trace: list[TraceEntry],
-    config_version: str,
-) -> None:
-    """A-07: every block, redaction and warning goes to the audit log, with the guardrail and its
-    reason only (reasons name patterns, entities, signatures or topics, never the message text).
-    Failures never change the reply."""
-    if all(entry.verdict == "pass" for entry in trace):
-        return
-    context_id = message.get("contextId")
-    try:
-        events = [
-            AuditEventIn(
-                rule_id=entry.guardrail_id,
-                rule_name=entry.guardrail_name,
-                kind="guardrail",
-                stage=entry.stage,
-                action=entry.verdict,
-                config_version=config_version,
-                details=_audit_details(entry),
-            )
-            for entry in trace
-            if entry.verdict != "pass"
-        ]
-        await run_in_threadpool(
-            recorder.record_events,
-            agent_id,
-            key,
-            context_id if isinstance(context_id, str) and context_id else None,
-            events,
-        )
-    except Exception:  # noqa: BLE001 - audit storage must not break the call
-        logger.warning("Could not record audit events for agent %s", agent_id, exc_info=True)
-
-
-def _audit_details(entry: TraceEntry) -> str:
-    reason = entry.reason
-    if entry.simulated and not reason.startswith("Simulated"):
-        reason = f"Simulated: {reason}"  # never report a simulated verdict as a real one
-    return reason[:500]
-
-
-def _blocked(
-    rpc_id: Any,
-    message: a2a.Json,
-    stage: str,
-    outcome: StageOutcome,
-    role: str | None = None,
-) -> JSONResponse:
-    """The refusal task for a blocked call; the agent's reply, if any, is never shown."""
-    hub: dict[str, Any] = {"blocked": True, "stage": stage, "trace": dump_trace(outcome.trace)}
-    if role is not None:
-        hub["role"] = role
-    task = a2a.rejected_task(message.get("contextId"), outcome.blocked_reason or "Blocked", hub)
-    return JSONResponse({"jsonrpc": a2a.JSONRPC_VERSION, "id": rpc_id, "result": task})
+    return JSONResponse(reply.body)
