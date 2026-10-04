@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useDeleteMcpServer, useMcpServers } from '../../api/mcpServers'
 import type { McpServer } from '../../api/types'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
-import { RegisterMcpServerForm } from './RegisterMcpServerForm'
+import { McpServerForm } from './McpServerForm'
 
 const HEADERS = ['Server', 'URL', 'Auth', 'Allowed tools', 'Agents', '']
 const cell = 'px-4 py-3 align-middle'
@@ -16,6 +16,7 @@ function authSummary(auth: McpServer['auth']): string {
 export function McpServersPage() {
   const servers = useMcpServers()
   const [registering, setRegistering] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const registerButtonRef = useRef<HTMLButtonElement>(null)
   const wasRegistering = useRef(false)
@@ -31,6 +32,8 @@ export function McpServersPage() {
     const timer = setTimeout(() => setHighlightId(null), 3000)
     return () => clearTimeout(timer)
   }, [highlightId])
+
+  const editing = servers.data?.find((s) => s.id === editingId)
 
   let content
   if (servers.isError) {
@@ -51,7 +54,16 @@ export function McpServersPage() {
       </div>
     )
   } else {
-    content = <McpServersTable servers={servers.data} highlightId={highlightId} />
+    content = (
+      <McpServersTable
+        servers={servers.data}
+        highlightId={highlightId}
+        onEdit={(id) => {
+          setRegistering(false)
+          setEditingId(id)
+        }}
+      />
+    )
   }
 
   return (
@@ -65,15 +77,23 @@ export function McpServersPage() {
           </p>
         </div>
         {servers.isSuccess && !registering && (
-          <button ref={registerButtonRef} type="button" className={buttonPrimary} onClick={() => setRegistering(true)}>
+          <button ref={registerButtonRef} type="button" className={buttonPrimary} onClick={() => {
+              setEditingId(null)
+              setRegistering(true)
+            }}>
             Register MCP server
           </button>
         )}
       </header>
       {registering && (
-        <RegisterMcpServerForm
-          onClose={() => setRegistering(false)}
-          onRegistered={(server) => setHighlightId(server.id)}
+        <McpServerForm onClose={() => setRegistering(false)} onSaved={(server) => setHighlightId(server.id)} />
+      )}
+      {editing && (
+        <McpServerForm
+          key={editing.id}
+          server={editing}
+          onClose={() => setEditingId(null)}
+          onSaved={(server) => setHighlightId(server.id)}
         />
       )}
       {content}
@@ -81,7 +101,13 @@ export function McpServersPage() {
   )
 }
 
-function McpServersTable({ servers, highlightId }: { servers: readonly McpServer[]; highlightId: string | null }) {
+interface TableProps {
+  servers: readonly McpServer[]
+  highlightId: string | null
+  onEdit: (id: string) => void
+}
+
+function McpServersTable({ servers, highlightId, onEdit }: TableProps) {
   const remove = useDeleteMcpServer()
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
@@ -134,7 +160,15 @@ function McpServersTable({ servers, highlightId }: { servers: readonly McpServer
                     </ul>
                   </td>
                   <td className={`${cell} text-muted`}>{server.agents}</td>
-                  <td className={`${cell} text-right`}>
+                  <td className={`${cell} text-right whitespace-nowrap`}>
+                    <button
+                      type="button"
+                      aria-label={`Edit ${server.name}`}
+                      onClick={() => onEdit(server.id)}
+                      className={`${buttonSecondary} mr-2 px-3 text-xs`}
+                    >
+                      Edit
+                    </button>
                     {confirmingId === server.id ? (
                       <button
                         type="button"

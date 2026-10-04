@@ -23,8 +23,10 @@ import type {
   GuardrailTemplate,
   GuardrailUpdate,
   InjectionSignature,
+  AgentMcpServer,
   McpServer,
   McpServerCreate,
+  McpServerUpdate,
 } from '../api/types'
 import { TEST_TOKEN } from './fakeAuth'
 
@@ -153,6 +155,25 @@ function seedSessions(): AgentSession[] {
   ]
 }
 
+function authSummary(auth: McpServerCreate['auth']): McpServer['auth'] {
+  if (auth.type === 'api_key') return { type: 'api_key', header: auth.header, scopes: [], has_secret: true }
+  if (auth.type === 'oauth') return { type: 'oauth', client_id: auth.client_id, scopes: auth.scopes, has_secret: true }
+  return { type: 'none', scopes: [], has_secret: false }
+}
+
+function withAgentCount(server: McpServer): McpServer {
+  return { ...server, agents: fakeApi.mcpAccess.filter((a) => a.server_id === server.id).length }
+}
+
+function agentMcpEntries(agentId: string): AgentMcpServer[] {
+  return fakeApi.mcpAccess.flatMap((a) => {
+    const server = fakeApi.mcpServers.find((s) => s.id === a.server_id)
+    return a.agent_id === agentId && server
+      ? [{ server_id: server.id, name: server.name, url: server.url, available_tools: server.allowed_tools, allowed_tools: a.allowed_tools }]
+      : []
+  })
+}
+
 function seedMcpServers(): McpServer[] {
   return [
     {
@@ -212,6 +233,11 @@ export const fakeApi: {
   gatewayKeyCount: number
   mcpServers: McpServer[]
   lastMcpServerCreate: McpServerCreate | null
+  lastMcpServerUpdate: McpServerUpdate | null
+  /** FR-17: which agent may use which server, with which tools. */
+  mcpAccess: { agent_id: string; server_id: string; allowed_tools: string[] }[]
+  /** null: the MCP endpoints answer normally; a status: they all fail with it. */
+  mcpFailure: number | null
   auditEvents: AuditEvent[]
   sessions: AgentSession[]
   auditSupported: boolean
@@ -234,6 +260,9 @@ export const fakeApi: {
   gatewayKeyCount: 0,
   mcpServers: seedMcpServers(),
   lastMcpServerCreate: null,
+  lastMcpServerUpdate: null,
+  mcpAccess: [],
+  mcpFailure: null,
   auditEvents: seedAuditEvents(),
   sessions: seedSessions(),
   auditSupported: true,
@@ -266,6 +295,9 @@ export function resetFakeApi(): void {
   fakeApi.gatewayKeyCount = 0
   fakeApi.mcpServers = seedMcpServers()
   fakeApi.lastMcpServerCreate = null
+  fakeApi.lastMcpServerUpdate = null
+  fakeApi.mcpAccess = []
+  fakeApi.mcpFailure = null
   fakeApi.auditEvents = seedAuditEvents()
   fakeApi.sessions = seedSessions()
   fakeApi.auditSupported = true
@@ -483,7 +515,10 @@ export const fakeApiHandlers = [
     return HttpResponse.json(page(rows, p))
   }),
 
-  http.get(apiPath('/mcp-servers'), () => HttpResponse.json(fakeApi.mcpServers)),
+  http.get(apiPath('/mcp-servers'), () => {
+    if (fakeApi.mcpFailure) return detail(fakeApi.mcpFailure, 'MCP server storage is unavailable')
+    return HttpResponse.json(fakeApi.mcpServers.map(withAgentCount))
+  }),
 
   http.post(apiPath('/mcp-servers'), async ({ request }) => {
     const body = (await request.json()) as McpServerCreate
@@ -491,17 +526,11 @@ export const fakeApiHandlers = [
     if (fakeApi.mcpServers.some((s) => s.name === body.name)) {
       return detail(409, `MCP server '${body.name}' already exists`)
     }
-    const auth = body.auth
     const server: McpServer = {
       id: `mcp-${fakeApi.nextId++}`,
       name: body.name,
       url: body.url,
-      auth:
-        auth.type === 'api_key'
-          ? { type: 'api_key', header: auth.header, scopes: [], has_secret: true }
-          : auth.type === 'oauth'
-            ? { type: 'oauth', client_id: auth.client_id, scopes: auth.scopes, has_secret: true }
-            : { type: 'none', scopes: [], has_secret: false },
+      auth: authSummary(body.auth),
       allowed_tools: body.allowed_tools,
       agents: 0,
     }
@@ -509,9 +538,64 @@ export const fakeApiHandlers = [
     return HttpResponse.json(server, { status: 201 })
   }),
 
+  http.patch(apiPath('/mcp-servers/:id'), async ({ request, params }) => {
+    const index = fakeApi.mcpServers.findIndex((s) => s.id === params.id)
+    if (index === -1) return detail(404, 'MCP server not found')
+    const body = (await request.json()) as McpServerUpdate
+    fakeApi.lastMcpServerUpdate = body
+    const current = fakeApi.mcpServers[index]
+    if (body.name !== undefined && fakeApi.mcpServers.some((s) => s.id !== current.id && s.name === body.name)) {
+      return detail(409, `MCP server '${body.name}' already exists`)
+    }
+    const updated: McpServer = {
+      ...current,
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.url !== undefined ? { url: body.url } : {}),
+      ...(body.auth !== undefined ? { auth: authSummary(body.auth) } : {}),
+      ...(body.allowed_tools !== undefined ? { allowed_tools: body.allowed_tools } : {}),
+    }
+    fakeApi.mcpServers[index] = updated
+    if (body.allowed_tools !== undefined) {
+      // Same rule as the API: dropped tools leave every agent; an agent left with none loses it.
+      const tools = body.allowed_tools
+      fakeApi.mcpAccess = fakeApi.mcpAccess
+        .map((a) => (a.server_id === updated.id ? { ...a, allowed_tools: a.allowed_tools.filter((t) => tools.includes(t)) } : a))
+        .filter((a) => a.allowed_tools.length > 0)
+    }
+    return HttpResponse.json(withAgentCount(updated))
+  }),
+
   http.delete(apiPath('/mcp-servers/:id'), ({ params }) => {
     if (!fakeApi.mcpServers.some((s) => s.id === params.id)) return detail(404, 'MCP server not found')
     fakeApi.mcpServers = fakeApi.mcpServers.filter((s) => s.id !== params.id)
+    fakeApi.mcpAccess = fakeApi.mcpAccess.filter((a) => a.server_id !== params.id)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(apiPath('/agents/:id/mcp-servers'), ({ params }) => {
+    if (fakeApi.mcpFailure) return detail(fakeApi.mcpFailure, 'MCP access storage is unavailable')
+    return HttpResponse.json(agentMcpEntries(String(params.id)))
+  }),
+
+  http.put(apiPath('/agents/:id/mcp-servers/:serverId'), async ({ request, params }) => {
+    const server = fakeApi.mcpServers.find((s) => s.id === params.serverId)
+    if (!server) return detail(404, 'MCP server not found')
+    const { allowed_tools: tools } = (await request.json()) as { allowed_tools: string[] }
+    if (tools.length === 0) return validation('List should have at least 1 item after validation, not 0', ['body', 'allowed_tools'])
+    const unknown = tools.filter((t) => !server.allowed_tools.includes(t))
+    if (unknown.length) return detail(422, `${server.name} does not offer: ${unknown.join(', ')}`)
+    const agentId = String(params.id)
+    fakeApi.mcpAccess = [
+      ...fakeApi.mcpAccess.filter((a) => !(a.agent_id === agentId && a.server_id === server.id)),
+      { agent_id: agentId, server_id: server.id, allowed_tools: tools },
+    ]
+    return HttpResponse.json(agentMcpEntries(agentId).find((e) => e.server_id === server.id))
+  }),
+
+  http.delete(apiPath('/agents/:id/mcp-servers/:serverId'), ({ params }) => {
+    const before = fakeApi.mcpAccess.length
+    fakeApi.mcpAccess = fakeApi.mcpAccess.filter((a) => !(a.agent_id === params.id && a.server_id === params.serverId))
+    if (fakeApi.mcpAccess.length === before) return detail(404, 'The agent has no access to this server')
     return new HttpResponse(null, { status: 204 })
   }),
 

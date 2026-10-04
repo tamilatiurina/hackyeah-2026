@@ -184,6 +184,20 @@ export interface McpServerCreate {
   allowed_tools: string[]
 }
 
+/** PATCH /mcp-servers/{id}: only the fields sent change; `auth` replaces auth, secret included. */
+export type McpServerUpdate = Partial<McpServerCreate>
+
+/** FR-17: an MCP server an agent may use, and which of its tools. */
+export interface AgentMcpServer {
+  server_id: string
+  name: string
+  url: string
+  /** Everything the server offers. */
+  available_tools: string[]
+  /** What this agent may call. */
+  allowed_tools: string[]
+}
+
 export interface McpServer {
   id: string
   name: string

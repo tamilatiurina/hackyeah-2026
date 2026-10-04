@@ -6,6 +6,7 @@ import { ApiError } from '../../api/client'
 import { buttonPrimary, buttonSecondary } from '../../ui/classes'
 import { AgentDeploy } from './AgentDeploy'
 import { AgentGuardrails } from './AgentGuardrails'
+import { AgentMcpServers } from './AgentMcpServers'
 import { AgentOverview } from './AgentOverview'
 import { EditAgentForm } from './EditAgentForm'
 
@@ -118,6 +119,7 @@ export function AgentPage() {
         <AgentOverview agent={agent.data} />
       )}
       <AgentGuardrails agent={agent.data} />
+      <AgentMcpServers agent={agent.data} />
       <AgentDeploy agent={agent.data} />
     </section>
   )
