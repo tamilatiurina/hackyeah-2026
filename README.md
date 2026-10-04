@@ -15,6 +15,28 @@ https://hackyeah-2026-theta.vercel.app/sessions
 
 AI Control Layer: govern AI agents with one central policy, watch every rule fire live, and edit the policy without restarting anything.
 
+## Tutorial
+
+Try it on the [live app](https://hackyeah-2026-theta.vercel.app) or [run it locally](#first-time-setup). The tabs at the top of the sidebar switch between the two contexts.
+
+**Agent Wrapped**: put guardrails in front of any A2A agent.
+
+| #   | Go to                          | Do this                                                                        |
+| --- | ------------------------------ | ------------------------------------------------------------------------------ |
+| 1   | **Agents** → **Register agent** | Paste an A2A agent URL. The hub reads its Agent Card                           |
+| 2   | **Guardrails** → **New guardrail** | Pick an engine and a template (PII, injection, topics…), a stage and an action |
+| 3   | Agent page → **Deploy**        | Attach guardrails, deploy, and copy the guarded URL and gateway key           |
+| 4   | **Test chat**                  | Pick the agent, send a message or a scenario, and read the trace. **Flag reply** if it's wrong |
+| 5   | **Sessions**, **Audit log**, **Security** | See usage against caps and every block or redaction, or **Run scan** to probe the agent |
+
+**Agent Integrated**: control pi coding agents with one live policy.
+
+| #   | Go to          | Do this                                                                       |
+| --- | -------------- | ----------------------------------------------------------------------------- |
+| 1   | **Playground** | Run a scenario (a banned command, a blocked file, a page with an injection)   |
+| 2   | **Policies**   | Turn off the rule that blocked it, save, and run the scenario again: it passes |
+| 3   | **Incidents**  | Every block, redaction and injection, with injection sources auto-banned     |
+
 | Path               | What it is                            | Tooling                 |
 | ------------------ | ------------------------------------- | ----------------------- |
 | `apps/api`         | Backend API (FastAPI)                 | Python, standalone uv   |
@@ -65,12 +87,7 @@ make api        # API on :8000, auto-reload
 make web        # panel on :5173
 ```
 
-Open http://localhost:5173, switch to the Agent Integrated context, and:
-
-1. **Playground**: pick a simulated host, run a scenario (a banned command, a blocked file, a page that contains a prompt injection). The pi agent runs it and the control layer intercepts what the policy forbids. Every scenario is sandboxed in `/tmp/pi-demo-sandbox` and uses fake credentials; nothing outside the sandbox is touched.
-2. **Policies**: edit the live policy (`.pi/policy.json`). Disable the rule that blocked your scenario, save, run the scenario again, and it passes. Restore Defaults loads the seed policy from `packages/pi-control-layer/policy.json.example`.
-3. **Incidents**: every block, denial, redaction and injection detection lands here. Injection sources are auto-banned in the global config.
-4. **Sessions**: cost, token and tool-call stats for every pi session on the machine, playground runs included.
+Open http://localhost:5173 and follow the [tutorial](#tutorial). Playground scenarios run in `/tmp/pi-demo-sandbox` with fake credentials; nothing outside the sandbox is touched.
 
 The first scenario run seeds the policy and sandbox automatically; `make seed-sandbox` re-stages the demo files by hand.
 
