@@ -5,7 +5,24 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _API_ROOT = Path(__file__).resolve().parents[2]
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _repo_root() -> Path:
+    """Repo root: two levels above the app package (app/core/config.py -> repo).
+
+    On Vercel the bundle is flat (/var/task/app/... with no apps/api level),
+    so walking up finds the filesystem root — the bundle root (/var/task) is
+    the repo root there, detected via the api/index.py entrypoint it always
+    contains.
+    """
+    if (vercel_task := Path("/var/task")).is_dir() and (vercel_task / "api" / "index.py").exists():
+        return vercel_task
+    if os.environ.get("VERCEL"):  # runtime flag; belt and suspenders for the path probe
+        return _API_ROOT  # the bundle root is the API project dir itself
+    return _API_ROOT.parents[1]
+
+
+_REPO_ROOT = _repo_root()
 
 
 def _default_state_dir() -> str:
