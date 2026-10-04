@@ -143,6 +143,7 @@ def test_reply_carries_the_trace_usage_limits_and_scores() -> None:
     assert [(e["guardrailId"], e["source"], e["stage"], e["verdict"]) for e in hub["trace"]] == [
         ("gr-injection", "mandatory", "input", "pass"),
         ("gr-pii", "mandatory", "output", "pass"),
+        ("gr-injection", "mandatory", "output", "pass"),
         ("gr-competitors", "agent", "output", "pass"),
     ]
     assert hub["policyVersion"]
@@ -212,6 +213,36 @@ def test_output_redaction_is_audited() -> None:  # gr-pii is mandatory in the se
     assert "jan.kowalski@example.com" not in text and "[EMAIL]" in text
     [event] = MEMORY.events
     assert (event.action, event.stage, event.rule_id) == ("redact", "output", "gr-pii")
+
+
+# --- output guardrails catch the test agent's bad replies --------------------------------------
+
+
+def output_block(answer: dict[str, Any]) -> tuple[str, str, str]:
+    task = answer["result"]["task"]
+    assert task["status"]["state"] == "TASK_STATE_REJECTED"
+    [event] = MEMORY.events
+    return event.action, event.stage, event.rule_id
+
+
+def test_injection_in_a_reply_is_blocked() -> None:  # gr-injection is mandatory in the seeds
+    assert output_block(chat("#inject")) == ("block", "output", "gr-injection")
+
+
+def test_toxic_reply_is_blocked() -> None:
+    attach("gr-toxicity", 0)
+    assert output_block(chat("#toxic")) == ("block", "output", "gr-toxicity")
+
+
+def test_off_topic_reply_is_flagged() -> None:
+    attach("gr-topic", 0)
+
+    answer = chat("#offtopic")
+
+    # Without a judge key the topic check is a simulated heuristic, so it warns, not blocks.
+    assert "message" in answer["result"]
+    events = [(e.action, e.stage, e.rule_id) for e in MEMORY.events]
+    assert ("warn", "output", "gr-topic") in events
 
 
 def test_warning_is_audited_and_the_reply_still_arrives() -> None:

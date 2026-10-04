@@ -102,18 +102,18 @@ def test_prompt_injection_sees_new_signatures() -> None:
     assert r["reason"] == "Matched injection signature: pirate-speak"
 
 
-def test_toxicity_is_simulated() -> None:
+def test_toxicity_keyword_hit_is_a_real_verdict() -> None:
     config = {"template": "toxicity"}
     hit = dry("moderation", "block", config, "you are an idiot")
     assert hit == {
         "result": "block",
-        "reason": "Simulated: Abusive language: idiot",
+        "reason": "Abusive language: idiot",
         "output": None,
-        "simulated": True,
+        "simulated": False,
     }
     calm = dry("moderation", "block", config, "thanks for the help")
     assert calm["result"] == "pass"
-    assert calm["reason"] == "Simulated judge found nothing to flag"
+    assert calm["reason"] == "No match"
 
 
 def test_topic_allow_and_deny() -> None:

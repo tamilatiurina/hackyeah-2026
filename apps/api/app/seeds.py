@@ -27,9 +27,9 @@ def seed_guardrails() -> list[Guardrail]:
         Guardrail(
             id="gr-injection",
             name="Prompt injection detector",
-            description="Matches inputs against the company injection signatures.",
+            description="Matches messages and replies against the company injection signatures.",
             engine="regex",
-            stages=["input"],
+            stages=["input", "output"],
             action="block",
             config=PromptInjectionConfig(template="prompt_injection"),
             is_mandatory=True,
@@ -48,7 +48,7 @@ def seed_guardrails() -> list[Guardrail]:
             name="Topic: orders and returns only",
             description="Keeps the agent on order, delivery and return questions.",
             engine="llm_judge",
-            stages=["input"],
+            stages=["input", "output"],
             action="block",
             config=TopicConfig(
                 template="topic", mode="allow", topics=["orders", "delivery", "returns"]

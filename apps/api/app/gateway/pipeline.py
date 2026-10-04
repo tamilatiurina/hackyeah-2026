@@ -41,8 +41,8 @@ class GuardrailEngine(Protocol):
 
 
 class LocalEngine:
-    """The dry-run checks: regex, PII and signatures are real; the LLM judge is real when a judge
-    is given, otherwise it and moderation are heuristics and say so with simulated=True."""
+    """The dry-run checks: regex, PII, signatures and moderation keywords are real; the LLM judge
+    is real when a judge is given, otherwise it is a heuristic and says so with simulated=True."""
 
     def __init__(self, judge: Judge | None = None) -> None:
         self._judge = judge

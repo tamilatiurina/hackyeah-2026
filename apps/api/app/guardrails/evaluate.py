@@ -1,8 +1,8 @@
 """Dry-run a guardrail on sample text (FR-20).
 
-Regex, PII and prompt injection on the regex engine run for real. The llm_judge engine asks Claude
-when a judge is configured (app.guardrails.judge); without one, and on moderation, verdicts are
-keyword heuristics marked simulated.
+Regex, PII, prompt injection and the moderation keyword list run for real. The llm_judge engine asks
+Claude when a judge is configured (app.guardrails.judge); without one, its verdicts are keyword
+heuristics marked simulated.
 """
 
 import re
@@ -188,7 +188,8 @@ def evaluate(
             )
         return DryRunResult(result=rule.action, reason=f"Judge: {verdict.reason}", simulated=False)
 
-    simulated = rule.engine in ("llm_judge", "moderation")
+    # Moderation's keyword list is deterministic, so a hit is a real finding that can block.
+    simulated = rule.engine == "llm_judge"
     lowered = text.lower()
     reason: str | None = None
     redacted: str | None = None
