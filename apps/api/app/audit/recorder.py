@@ -45,6 +45,27 @@ def _stop_reason(events: list[AuditEventIn]) -> str | None:
     return None
 
 
+class NullAuditRecorder:
+    """Records nothing: security scans (SEC-01) keep their attack traffic out of the audit log;
+    the scan report is the record."""
+
+    def record_turn(
+        self,
+        agent_id: str,
+        key: str,
+        context_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+    ) -> SessionCounters | None:
+        return None
+
+    def record_events(
+        self, agent_id: str, key: str, context_id: str | None, events: list[AuditEventIn]
+    ) -> int:
+        return 0
+
+
 class InMemoryAuditRecorder:
     def record_turn(
         self,

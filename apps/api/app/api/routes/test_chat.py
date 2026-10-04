@@ -9,24 +9,23 @@ block, redaction and warning goes to the audit log, recorded as the signed-in ow
 One contextId per chat: the panel sends it; if it is missing, one is created and returned.
 """
 
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
-from postgrest.exceptions import APIError
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import get_role
 from app.api.routes.agents.deps import AgentDatabase, get_agent_database
+from app.api.routes.agents.target import load_upstream_target
 from app.audit.recorder import AuditRecorder, InMemoryAuditRecorder, OwnerAuditRecorder
 from app.bindings.repository import BindingRepository, get_binding_repository
 from app.bindings.resolve import resolve_for_request
 from app.core.config import settings
 from app.gateway import a2a, limits
 from app.gateway.pipeline import GuardrailEngine
-from app.gateway.resolver import UpstreamTarget
 from app.gateway.service import (
     Audit,
     GuardedReply,
@@ -192,29 +191,6 @@ def _usage(request_message: a2a.Json, reply: GuardedReply) -> Usage:
     return Usage.model_validate(usage.as_hub())
 
 
-def _load_target(database: AgentDatabase, agent_id: UUID) -> UpstreamTarget:
-    try:
-        response = (
-            database.client.table("agents")
-            .select("upstream_url,auth_header_name,auth_header_value")
-            .eq("id", str(agent_id))
-            .limit(1)
-            .execute()
-        )
-    except (APIError, httpx.HTTPError) as error:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "Could not load the agent"
-        ) from error
-    if not response.data:  # RLS: someone else's agent looks the same as a missing one
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found")
-    row = cast(dict[str, Any], response.data[0])
-    return UpstreamTarget(
-        upstream_url=str(row["upstream_url"]),
-        auth_header_name=row.get("auth_header_name"),
-        auth_header_value=row.get("auth_header_value"),
-    )
-
-
 @router.post("/{agent_id}/test-chat", response_model=ChatResponse, response_model_exclude_none=True)
 async def send_test_chat_message(
     agent_id: UUID,
@@ -227,7 +203,7 @@ async def send_test_chat_message(
     client: Annotated[httpx.AsyncClient, Depends(get_gateway_http_client)],
     recorder: Annotated[AuditRecorder, Depends(get_test_chat_recorder)],
 ) -> ChatResponse:
-    target = await run_in_threadpool(_load_target, database, agent_id)
+    target = await run_in_threadpool(load_upstream_target, database, agent_id)
 
     call: a2a.Json = body.model_dump(mode="json", exclude_none=True)
     message: a2a.Json = call["params"]["message"]

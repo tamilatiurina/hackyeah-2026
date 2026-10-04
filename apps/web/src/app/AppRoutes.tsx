@@ -8,6 +8,7 @@ import { GuardrailsPage } from '../pages/guardrails/GuardrailsPage'
 import { McpServersPage } from '../pages/mcp/McpServersPage'
 import { PolicyPage } from '../pages/policy/PolicyPage'
 import { PlaygroundPage } from '../pages/playground/PlaygroundPage'
+import { SecurityPage } from '../pages/security/SecurityPage'
 import { IncidentsPage } from '../pages/incidents/IncidentsPage'
 import { Placeholder } from '../pages/Placeholder'
 import { SessionsPage } from '../pages/sessions/SessionsPage'
@@ -26,6 +27,7 @@ const PAGES: Partial<Record<string, ReactElement>> = {
   '/mcp': <McpServersPage />,
   '/sessions': <SessionsPage />,
   '/test': <TestChatPage />,
+  '/security': <SecurityPage />,
   '/policies': <PolicyPage />,
   '/playground': <PlaygroundPage />,
   '/incidents': <IncidentsPage />,

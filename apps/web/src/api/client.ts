@@ -124,3 +124,47 @@ export function patchJson<T>(path: string, body: unknown, headers: ExtraHeaders 
 export async function deleteJson(path: string, headers: ExtraHeaders = {}): Promise<void> {
   await request<null>(path, { method: 'DELETE', headers })
 }
+
+/**
+ * POST with no body and read a newline-delimited JSON stream, calling onEvent once per line as it
+ * arrives (SEC-01 security scans report each probe this way).
+ */
+export async function streamNdjson(
+  path: string,
+  onEvent: (event: unknown) => void,
+  canRetry = true,
+): Promise<void> {
+  const url = new URL(apiPath(path), window.location.origin)
+  let response: Response
+  try {
+    const headers = new Headers()
+    const token = accessTokenProvider()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    response = await fetch(url, { method: 'POST', headers })
+  } catch {
+    throw new ApiError(0, 'Network error: could not reach the server')
+  }
+  if (response.status === 401 && unauthorizedHandler) {
+    if (await unauthorizedHandler(canRetry)) return streamNdjson(path, onEvent, false)
+  }
+  if (!response.ok) throw errorFrom(response.status, parseJson(await response.text()))
+  if (!response.body) throw new ApiError(response.status, 'Unexpected response from the server')
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffered = ''
+  const emit = (line: string) => {
+    if (!line.trim()) return
+    const event = parseJson(line)
+    if (event === undefined) throw new ApiError(response.status, 'Unexpected response from the server')
+    onEvent(event)
+  }
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (value) buffered += value
+    const lines = buffered.split('\n')
+    buffered = lines.pop() ?? ''
+    lines.forEach(emit)
+    if (done) break
+  }
+  emit(buffered)
+}

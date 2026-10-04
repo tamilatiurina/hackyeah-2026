@@ -19,6 +19,7 @@ export const PANEL_NAV_ITEMS: readonly NavItem[] = [
   { path: '/mcp', label: 'MCP servers', title: 'MCP servers', issue: 'S-02' },
   { path: '/evals', label: 'Evaluators', title: 'Evaluators', issue: 'S-01' },
   { path: '/test', label: 'Test chat', title: 'Test chat', issue: 'E-03' },
+  { path: '/security', label: 'Security', title: 'Security scan', issue: 'SEC-01' },
 ]
 
 // Agent Integrated mode: the pi agent harness integration.
