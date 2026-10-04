@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
 
+    # LLM judge engine (E-02). Without a key, llm_judge verdicts are simulated heuristics.
+    ANTHROPIC_API_KEY: str = ""
+    JUDGE_MODEL: str = "claude-haiku-4-5"
+    JUDGE_TIMEOUT_S: float = 8.0
+
     # pi control layer policy (anchored to the repo root, where the pi
     # extension's project-local lookup <cwd>/.pi/policy.json also points)
     POLICY_PATH: str = str(_REPO_ROOT / ".pi" / "policy.json")

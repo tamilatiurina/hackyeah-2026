@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from app.api.deps import get_role
 from app.bindings.repository import BindingRepository, get_binding_repository
 from app.guardrails.evaluate import PatternTimeoutError, evaluate
+from app.guardrails.judge import Judge, JudgeUnavailableError, get_judge
 from app.guardrails.models import (
     TEMPLATES,
     DryRunRequest,
@@ -23,6 +24,7 @@ router = APIRouter(tags=["guardrails"])
 Repo = Annotated[GuardrailRepository, Depends(get_guardrail_repository)]
 Bindings = Annotated[BindingRepository, Depends(get_binding_repository)]
 Role = Annotated[str | None, Depends(get_role)]
+JudgeDep = Annotated[Judge | None, Depends(get_judge)]
 
 
 def _require_admin(role: str | None, action: str) -> None:
@@ -60,9 +62,14 @@ def create_guardrail(body: GuardrailCreate, repo: Repo, role: Role) -> Guardrail
 
 
 @router.post("/guardrails/dry-run")
-def dry_run(body: DryRunRequest) -> DryRunResult:
+def dry_run(body: DryRunRequest, judge: JudgeDep) -> DryRunResult:
     try:
-        return evaluate(body, body.text, list(store.signatures.values()))
+        return evaluate(body, body.text, list(store.signatures.values()), judge)
+    except JudgeUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"The LLM judge is unavailable ({e}); try again",
+        ) from e
     except PatternTimeoutError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

@@ -24,3 +24,10 @@ def no_real_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
     # Without these settings, guardrails and MCP servers use memory. Tests that need them set them.
     monkeypatch.setattr(settings, "SUPABASE_URL", "")
     monkeypatch.setattr(settings, "SUPABASE_KEY", "")
+
+
+@pytest.fixture(autouse=True)
+def no_real_judge(monkeypatch: pytest.MonkeyPatch) -> None:
+    # apps/api/.env may hold a real Anthropic key; tests must never call the model.
+    # Without it, llm_judge verdicts are the simulated heuristics. Tests inject a fake judge.
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
