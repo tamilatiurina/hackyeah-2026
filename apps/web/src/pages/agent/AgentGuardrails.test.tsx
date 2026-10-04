@@ -130,6 +130,20 @@ describe('Agent guardrails (bindings)', () => {
     expect(output.getByText('Agent')).toBeInTheDocument()
   })
 
+  it('draws the order as a flow: caller, input checks, the agent, output checks, reply', async () => {
+    await open()
+    const flow = await within(section()).findByRole('group', { name: 'Guardrail order' })
+    await waitFor(() => expect(listNames('Input checks')).toEqual(['Prompt injection detector']))
+    const text = flow.textContent ?? ''
+    const steps = ['Caller', 'Prompt injection detector', 'Support Assistant', 'PII redaction', 'Reply']
+    const positions = steps.map((step) => text.indexOf(step))
+    expect(positions.every((p) => p >= 0)).toBe(true)
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+    const output = within(within(flow).getByRole('list', { name: 'Output checks' }))
+    expect(output.getByText('1')).toBeInTheDocument()
+    expect(output.getByText('Redact')).toBeInTheDocument()
+  })
+
   it('falls back when the API has no bindings endpoint', async () => {
     fakeApi.bindingsSupported = false
     renderApp('/agents/agent-support')

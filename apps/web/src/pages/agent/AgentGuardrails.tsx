@@ -9,19 +9,14 @@ import {
 } from '../../api/bindings'
 import { ApiError } from '../../api/client'
 import { useGuardrails } from '../../api/guardrails'
-import type { Agent, Binding, EffectiveGuardrail, Guardrail } from '../../api/types'
+import type { Agent, Binding, Guardrail } from '../../api/types'
 import { badgeClass, buttonSecondary, inputClass } from '../../ui/classes'
 import { ACTION_LABELS, engineLabel, stageLabel } from '../guardrails/guardrailDisplay'
+import { GuardrailFlow } from './GuardrailFlow'
 
 const ATTACH_UNAVAILABLE = "Attaching guardrails isn't available on this API yet."
 const small = `${buttonSecondary} px-3 text-xs`
 const sub = 'm-0 text-xs font-semibold tracking-[0.04em] text-muted uppercase'
-const SOURCE_LABELS: Record<EffectiveGuardrail['source'], string> = {
-  mandatory: 'Mandatory',
-  agent: 'Agent',
-  role: 'Role',
-  user: 'User',
-}
 
 function Badges({ guardrail }: { guardrail: Guardrail }) {
   return (
@@ -30,23 +25,6 @@ function Badges({ guardrail }: { guardrail: Guardrail }) {
       <span className={`${badgeClass} bg-[#F0F0EB] text-[#30343B]`}>{stageLabel(guardrail.stages)}</span>
       <span className={`${badgeClass} bg-[#F0F0EB] text-[#30343B]`}>{ACTION_LABELS[guardrail.action]}</span>
     </span>
-  )
-}
-
-function EffectiveList({ label, entries }: { label: string; entries: EffectiveGuardrail[] }) {
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-2">
-      <h4 className="m-0 text-sm font-semibold">{label}</h4>
-      <ol aria-label={label} className="m-0 flex list-decimal flex-col gap-1 pl-5 text-sm">
-        {entries.map((e) => (
-          <li key={e.guardrail.id}>
-            <span data-name>{e.guardrail.name}</span>{' '}
-            <span className="text-xs text-muted">{SOURCE_LABELS[e.source]}</span>
-          </li>
-        ))}
-      </ol>
-      {entries.length === 0 && <p className="m-0 text-sm text-muted">Nothing runs here.</p>}
-    </div>
   )
 }
 
@@ -290,10 +268,7 @@ export function AgentGuardrails({ agent }: { agent: Agent }) {
           {effective.data && (
             <div className="flex flex-col gap-3 border-t border-line pt-4">
               <h3 className={sub}>Runs in this order</h3>
-              <div className="flex flex-col gap-4 sm:flex-row">
-                <EffectiveList label="Input checks" entries={effective.data.input} />
-                <EffectiveList label="Output checks" entries={effective.data.output} />
-              </div>
+              <GuardrailFlow agentName={agent.name} input={effective.data.input} output={effective.data.output} />
             </div>
           )}
         </>
