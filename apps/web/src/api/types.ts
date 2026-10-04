@@ -69,10 +69,8 @@ export type Stage = 'input' | 'output'
 export type GuardrailAction = 'block' | 'redact' | 'warn'
 export type TemplateId = 'pii' | 'prompt_injection' | 'toxicity' | 'topic' | 'regex' | 'llm_judge'
 
-export type PiiEntity = 'EMAIL' | 'PHONE' | 'CREDIT_CARD' | 'IBAN'
-
 export type GuardrailConfig =
-  | { template: 'pii'; entities: PiiEntity[] }
+  | { template: 'pii'; entities: string[] }
   | { template: 'prompt_injection'; use_company_signatures: boolean }
   | { template: 'toxicity'; threshold: number }
   | { template: 'topic'; mode: 'allow' | 'deny'; topics: string[] }
@@ -84,7 +82,6 @@ export interface GuardrailTemplate {
   label: string
   engines: Engine[]
   actions: GuardrailAction[]
-  entities?: PiiEntity[]
 }
 
 export interface GuardrailRule {

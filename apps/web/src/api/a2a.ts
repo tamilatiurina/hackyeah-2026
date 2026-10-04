@@ -11,7 +11,7 @@ export interface TraceEntry {
   guardrailName: string
   engine: 'regex' | 'llm_judge' | 'library' | 'moderation'
   stage: 'input' | 'output'
-  verdict: 'pass' | 'block' | 'redact' | 'warn' | 'skipped' | 'error'
+  verdict: 'pass' | 'block' | 'redact' | 'warn'
   reason: string
   latencyMs: number
   simulated?: boolean
@@ -20,9 +20,6 @@ export interface TraceEntry {
 export interface GuardrailHubMetadata {
   blocked?: boolean
   stage?: 'input' | 'output'
-  policyVersion?: string
-  role?: string
-  userId?: string
   trace?: TraceEntry[]
   usage?: { inputTokens: number; outputTokens: number; costUsd?: number }
   limits?: { name: string; used: number; max: number; unit?: string }[]

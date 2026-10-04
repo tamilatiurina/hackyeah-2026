@@ -44,7 +44,7 @@ describe('New guardrail', () => {
     await user.click(engine('Moderation API'))
     expect(templateChips()).toEqual(['None', 'Toxicity'])
     await user.click(engine('Regex \\+ rules'))
-    expect(templateChips()).toEqual(['None', 'Prompt injection', 'Regex'])
+    expect(templateChips()).toEqual(['None', 'PII', 'Prompt injection', 'Regex'])
   })
 
   it('offers only actions the template allows', async () => {
