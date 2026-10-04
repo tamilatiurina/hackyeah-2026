@@ -56,4 +56,6 @@ jobs:
       - uses: supabase/setup-cli@v1
         with: { version: 2.119.0 } # same CLI as `make supabase`
       - run: supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD" --workdir apps/api
-      - run: supabase db push --password "$SUPABASE_DB_PASSWORD" --workdir apps/api
+      # --include-all: migrations from parallel branches can land with an older timestamp than one
+      # already applied; apply them too instead of refusing the whole push.
+      - run: supabase db push --include-all --password "$SUPABASE_DB_PASSWORD" --workdir apps/api
