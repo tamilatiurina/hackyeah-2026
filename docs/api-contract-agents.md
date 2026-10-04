@@ -175,3 +175,26 @@ A `kind="limit"` event with `action="block"` marks the session stopped, with `de
 reason. `details` is the reason only (≤ 500 chars), never message text. With Supabase the recorder
 calls the `gateway_record_turn` / `gateway_record_events` functions, which check the gateway key
 hash. B-05 adds cost and fills `Session.limits`.
+
+## FR-16 / FR-17: MCP servers and per-agent access — implemented
+
+Signed-in Bearer token required (401 without one when Supabase is configured).
+
+- `PATCH /api/v1/mcp-servers/{id}`: any of `name`, `url`, `auth`, `allowed_tools`. `auth` replaces
+  the whole auth, secret included; omit it to keep the current one. A tool removed from a server is
+  removed from every agent that had it, and an agent left with no tools loses the server.
+  404 unknown, 409 duplicate name, 422 invalid or repeated tool names.
+- `McpServer.agents`: how many of the caller's agents may use the server.
+- `GET /api/v1/agents/{agent_id}/mcp-servers` →
+  `[{ server_id, name, url, available_tools, allowed_tools }]` (`available_tools` = everything the
+  server offers; `allowed_tools` = what this agent may call).
+- `PUT /api/v1/agents/{agent_id}/mcp-servers/{server_id}` with `{ "allowed_tools": [...] }`: grant
+  the server with exactly these tools (attach, or replace the selection). 422 when a tool isn't
+  offered by the server, the list is empty or repeats a tool; 404 for an unknown server or an agent
+  the caller doesn't own.
+- `DELETE /api/v1/agents/{agent_id}/mcp-servers/{server_id}` → 204; 404 if the agent had no access.
+
+Only an agent's owner sees or changes its MCP access (RLS). On every call the gateway and the test
+chat send the agent its servers and tools in `params.metadata.guardrailHub.mcpServers` (see
+`docs/agent-contract-a2a.md`); credentials never leave the hub.
+

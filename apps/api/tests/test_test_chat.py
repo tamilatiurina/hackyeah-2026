@@ -4,6 +4,7 @@ The upstream is the real apps/test-agent, reached in-process. Without Supabase t
 to A-07's in-memory store (app.audit.memory.MEMORY), which the tests read.
 """
 
+import json
 import sys
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -22,6 +23,9 @@ from app.gateway import service as gateway_service
 from app.gateway.policy import get_policy_loader
 from app.gateway.resolver import UpstreamTarget, get_agent_resolver
 from app.main import app
+from app.mcp.agent_access import InMemoryAgentMcpRepository
+from app.mcp.models import McpServerCreate
+from app.mcp.repository import InMemoryMcpServerRepository
 from app.store import store
 from fastapi.testclient import TestClient
 from pydantic import HttpUrl
@@ -50,9 +54,11 @@ class Agent(httpx.AsyncBaseTransport):
             app=create_test_agent(auth_value="Bearer agent-secret", public_url=BASE_URL)
         )
         self.calls = 0
+        self.bodies: list[dict[str, Any]] = []
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         self.calls += 1
+        self.bodies.append(json.loads(request.content))
         return await self.inner.handle_async_request(request)
 
 
@@ -349,3 +355,28 @@ def test_guarded_url_reports_the_demo_role_and_strips_it() -> None:
     hub = r.json()["result"]["message"]["metadata"]["guardrailHub"]
     assert hub["role"] == "intern"
     assert ("gr-competitors", "role") in [(e["guardrailId"], e["source"]) for e in hub["trace"]]
+
+
+def test_the_test_chat_tells_the_agent_its_mcp_servers(agent: Agent) -> None:
+    server = InMemoryMcpServerRepository().add(
+        "mcp-docs",
+        McpServerCreate.model_validate(
+            {
+                "name": "Docs",
+                "url": "https://mcp.acme.dev/docs",
+                "auth": {"type": "none"},
+                "allowed_tools": ["search_docs", "get_page"],
+            }
+        ),
+    )
+    InMemoryAgentMcpRepository().put(AGENT_ID, server, ["search_docs"])
+    chat("hello")
+    hub = agent.bodies[0]["params"]["metadata"]["guardrailHub"]
+    assert hub["mcpServers"] == [
+        {
+            "id": "mcp-docs",
+            "name": "Docs",
+            "url": "https://mcp.acme.dev/docs",
+            "allowedTools": ["search_docs"],
+        }
+    ]

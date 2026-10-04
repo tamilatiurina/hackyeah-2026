@@ -35,6 +35,12 @@ from app.gateway.service import (
     send_guarded,
 )
 from app.guardrails.repository import GuardrailRepository, get_guardrail_repository
+from app.mcp.agent_access import (
+    InMemoryMcpGrantLoader,
+    McpGrantLoader,
+    OwnerMcpGrantLoader,
+    load_grants,
+)
 
 router = APIRouter(prefix="/agents", tags=["test chat"])
 
@@ -46,6 +52,15 @@ def get_test_chat_recorder(
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         return OwnerAuditRecorder(database.client)
     return InMemoryAuditRecorder()
+
+
+def get_test_chat_mcp_loader(
+    database: Annotated[AgentDatabase, Depends(get_agent_database)],
+) -> McpGrantLoader:
+    """FR-17: the agent's MCP access, read as the signed-in owner; in memory without Supabase."""
+    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
+        return OwnerMcpGrantLoader(database.client)
+    return InMemoryMcpGrantLoader()
 
 
 # --- the A2A 1.0 subset the panel sends and reads (docs/agent-contract-a2a.md) -------------
@@ -226,6 +241,7 @@ async def send_test_chat_message(
     engine: Annotated[GuardrailEngine, Depends(get_guardrail_engine)],
     client: Annotated[httpx.AsyncClient, Depends(get_gateway_http_client)],
     recorder: Annotated[AuditRecorder, Depends(get_test_chat_recorder)],
+    mcp: Annotated[McpGrantLoader, Depends(get_test_chat_mcp_loader)],
 ) -> ChatResponse:
     target = await run_in_threadpool(_load_target, database, agent_id)
 
@@ -239,6 +255,7 @@ async def send_test_chat_message(
         resolve_for_request, guardrails, bindings, str(agent_id), role, database.owner_id
     )
 
+    grants = await run_in_threadpool(load_grants, mcp, str(agent_id), None)
     reply = await send_guarded(
         call,
         target=target,
@@ -247,6 +264,7 @@ async def send_test_chat_message(
         client=client,
         audit=Audit(recorder=recorder, agent_id=str(agent_id)),
         role=role,
+        mcp_servers=[grant.for_agent() for grant in grants],
     )
 
     answer = reply.body

@@ -226,6 +226,19 @@ def _blocked(
     return {"jsonrpc": a2a.JSONRPC_VERSION, "id": rpc_id, "result": task}
 
 
+def _add_mcp_servers(call: a2a.Json, mcp_servers: list[a2a.Json]) -> None:
+    """Put the agent's MCP access in params.metadata.guardrailHub.mcpServers, keeping whatever
+    else the caller sent in params metadata."""
+    params: a2a.Json = call["params"]
+    metadata = params.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = params["metadata"] = {}
+    hub = metadata.get(a2a.METADATA_KEY)
+    if not isinstance(hub, dict):
+        hub = metadata[a2a.METADATA_KEY] = {}
+    hub["mcpServers"] = mcp_servers
+
+
 async def send_guarded(
     call: a2a.Json,
     *,
@@ -236,12 +249,15 @@ async def send_guarded(
     audit: Audit,
     role: str | None = None,
     raw_body: bytes | None = None,
+    mcp_servers: list[a2a.Json] | None = None,
 ) -> GuardedReply:
     """Run a validated SendMessage call through the guardrails and the agent.
 
     `raw_body` is the call as the caller sent it: with no guardrails it is forwarded as-is
     and the agent's answer comes back byte for byte. Pass None when the call was changed (for
     example a demo `role` field stripped off it). `role` selects role bindings and is reported.
+    `mcp_servers` (FR-17) are the MCP servers and tools the agent may use; the agent gets them in
+    params.metadata.guardrailHub.mcpServers.
     """
     rpc_id = call.get("id")
     message: a2a.Json = call["params"]["message"]
@@ -255,7 +271,10 @@ async def send_guarded(
         await _record_events(audit, context_id, inbound.trace, policy)
         refusal = _blocked(rpc_id, message, "input", inbound, policy, role)
         return GuardedReply(refusal, trace=inbound.trace)
-    body = raw_body if raw_body is not None and not guarded else json.dumps(call).encode()
+    if mcp_servers:
+        _add_mcp_servers(call, mcp_servers)
+    passthrough = raw_body is not None and not guarded and not mcp_servers
+    body = raw_body if passthrough and raw_body is not None else json.dumps(call).encode()
 
     # --- forward to the agent's JSON-RPC endpoint ---
     headers = {"Content-Type": "application/json", a2a.A2A_VERSION_HEADER: a2a.A2A_VERSION}

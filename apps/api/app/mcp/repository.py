@@ -14,7 +14,16 @@ from typing import Annotated, Any, Protocol, TypeVar
 import httpx
 from app.core.config import settings
 from app.core.supabase import get_supabase_for_user
-from app.mcp.models import ApiKeyAuth, AuthSummary, McpServer, McpServerCreate, OAuthAuth
+from app.mcp.models import (
+    ApiKeyAuth,
+    Auth,
+    AuthSummary,
+    McpServer,
+    McpServerCreate,
+    McpServerUpdate,
+    OAuthAuth,
+    summarize,
+)
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from postgrest import ReturnMethod
@@ -43,27 +52,42 @@ class McpServerRepository(Protocol):
 
     def add(self, server_id: str, body: McpServerCreate) -> McpServer: ...
 
+    def update(self, server_id: str, changes: McpServerUpdate) -> McpServer | None:
+        """The updated server, or None if it doesn't exist. Raises NameTakenError."""
+        ...
+
     def delete(self, server_id: str) -> bool: ...
 
 
+def auth_columns(auth: Auth) -> dict[str, Any]:
+    """Every auth column, so switching auth type clears the old type's fields."""
+    columns: dict[str, Any] = {
+        "auth_type": auth.type,
+        "auth_header": None,
+        "auth_secret": None,
+        "oauth_token_url": None,
+        "oauth_client_id": None,
+        "oauth_scopes": [],
+    }
+    if isinstance(auth, ApiKeyAuth):
+        columns["auth_header"] = auth.header
+        columns["auth_secret"] = auth.api_key.get_secret_value()
+    elif isinstance(auth, OAuthAuth):
+        columns["auth_secret"] = auth.client_secret.get_secret_value()
+        columns["oauth_token_url"] = str(auth.token_url)
+        columns["oauth_client_id"] = auth.client_id
+        columns["oauth_scopes"] = list(auth.scopes)
+    return columns
+
+
 def to_row(server_id: str, body: McpServerCreate) -> dict[str, Any]:
-    auth = body.auth
-    row: dict[str, Any] = {
+    return {
         "id": server_id,
         "name": body.name,
         "url": str(body.url),
-        "auth_type": auth.type,
         "allowed_tools": list(body.allowed_tools),
+        **auth_columns(body.auth),
     }
-    if isinstance(auth, ApiKeyAuth):
-        row["auth_header"] = auth.header
-        row["auth_secret"] = auth.api_key.get_secret_value()
-    elif isinstance(auth, OAuthAuth):
-        row["auth_secret"] = auth.client_secret.get_secret_value()
-        row["oauth_token_url"] = str(auth.token_url)
-        row["oauth_client_id"] = auth.client_id
-        row["oauth_scopes"] = list(auth.scopes)
-    return row
 
 
 def from_row(row: Any) -> McpServer:
@@ -90,10 +114,26 @@ def from_row(row: Any) -> McpServer:
 
 # in-memory: id -> public server (secrets are not kept in memory)
 _SERVERS: dict[str, McpServer] = {}
+# in-memory FR-17 access: (agent id, server id) -> the tools that agent may call
+ACCESS: dict[tuple[str, str], list[str]] = {}
 
 
 def reset_in_memory_servers() -> None:
     _SERVERS.clear()
+    ACCESS.clear()
+
+
+def _sync_access(server_id: str, tools: list[str]) -> None:
+    """A tool removed from a server leaves every agent; an agent left with none loses the server
+    (the sync_agent_mcp_tools trigger does the same in Supabase)."""
+    for key, allowed in list(ACCESS.items()):
+        if key[1] != server_id:
+            continue
+        kept = [t for t in allowed if t in tools]
+        if kept:
+            ACCESS[key] = kept
+        else:
+            del ACCESS[key]
 
 
 class InMemoryMcpServerRepository:
@@ -110,7 +150,34 @@ class InMemoryMcpServerRepository:
         _SERVERS[server_id] = server
         return server
 
+    def update(self, server_id: str, changes: McpServerUpdate) -> McpServer | None:
+        current = _SERVERS.get(server_id)
+        if current is None:
+            return None
+        if changes.name is not None and any(
+            s.id != server_id and s.name.lower() == changes.name.lower() for s in _SERVERS.values()
+        ):
+            raise NameTakenError
+        updated = current.model_copy(
+            update={
+                "name": changes.name if changes.name is not None else current.name,
+                "url": changes.url if changes.url is not None else current.url,
+                "auth": summarize(changes.auth) if changes.auth is not None else current.auth,
+                "allowed_tools": (
+                    list(changes.allowed_tools)
+                    if changes.allowed_tools is not None
+                    else current.allowed_tools
+                ),
+            }
+        )
+        _SERVERS[server_id] = updated
+        if changes.allowed_tools is not None:
+            _sync_access(server_id, updated.allowed_tools)
+        return updated
+
     def delete(self, server_id: str) -> bool:
+        for key in [k for k in ACCESS if k[1] == server_id]:
+            del ACCESS[key]
         return _SERVERS.pop(server_id, None) is not None
 
 
@@ -164,6 +231,30 @@ class SupabaseMcpServerRepository:
             lambda: self._client.table(TABLE).insert(row, returning=ReturnMethod.minimal).execute()
         )
         return from_row(row)
+
+    def update(self, server_id: str, changes: McpServerUpdate) -> McpServer | None:
+        if self.get(server_id) is None:
+            return None
+        values: dict[str, Any] = {}
+        if changes.name is not None:
+            values["name"] = changes.name
+        if changes.url is not None:
+            values["url"] = str(changes.url)
+        if changes.allowed_tools is not None:
+            values["allowed_tools"] = list(changes.allowed_tools)  # the trigger syncs agents
+        if changes.auth is not None:
+            values.update(auth_columns(changes.auth))
+        if values:
+            # minimal: the row includes auth_secret, which signed-in users may not select.
+            self._run(
+                lambda: (
+                    self._client.table(TABLE)
+                    .update(values, returning=ReturnMethod.minimal)
+                    .eq("id", server_id)
+                    .execute()
+                )
+            )
+        return self.get(server_id)
 
     def delete(self, server_id: str) -> bool:
         if self.get(server_id) is None:

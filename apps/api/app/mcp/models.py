@@ -51,6 +51,23 @@ def summarize(auth: NoAuth | ApiKeyAuth | OAuthAuth) -> AuthSummary:
 
 
 # --- request / response ---
+def _valid_name(v: str) -> str:
+    v = v.strip()
+    if not v:
+        raise ValueError("name must not be blank")
+    return v
+
+
+def valid_tools(tools: list[str]) -> list[str]:
+    """MCP tool names, each valid and listed once."""
+    bad = [t for t in tools if not TOOL_NAME.match(t)]
+    if bad:
+        raise ValueError(f"invalid tool names: {', '.join(bad)}")
+    if len(set(tools)) != len(tools):
+        raise ValueError("tools must be listed once each")
+    return tools
+
+
 class McpServerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     url: AnyHttpUrl
@@ -60,20 +77,31 @@ class McpServerCreate(BaseModel):
     @field_validator("name")
     @classmethod
     def strip_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("name must not be blank")
-        return v
+        return _valid_name(v)
 
     @field_validator("allowed_tools")
     @classmethod
     def valid_unique_tools(cls, tools: list[str]) -> list[str]:
-        bad = [t for t in tools if not TOOL_NAME.match(t)]
-        if bad:
-            raise ValueError(f"invalid tool names: {', '.join(bad)}")
-        if len(set(tools)) != len(tools):
-            raise ValueError("allowed_tools must be unique")
-        return tools
+        return valid_tools(tools)
+
+
+class McpServerUpdate(BaseModel):
+    """PATCH: only the fields sent change. `auth` replaces the whole auth, secret included."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    url: AnyHttpUrl | None = None
+    auth: Auth | None = None
+    allowed_tools: list[str] | None = Field(default=None, min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str | None) -> str | None:
+        return None if v is None else _valid_name(v)
+
+    @field_validator("allowed_tools")
+    @classmethod
+    def valid_unique_tools(cls, tools: list[str] | None) -> list[str] | None:
+        return None if tools is None else valid_tools(tools)
 
 
 class McpServer(BaseModel):
@@ -82,4 +110,39 @@ class McpServer(BaseModel):
     url: AnyHttpUrl
     auth: AuthSummary
     allowed_tools: list[str]
-    agents: int = 0  # number of agents using it; filled in once FR-17 attaches servers to agents
+    agents: int = 0  # how many of the caller's agents may use it (FR-17)
+
+
+# --- FR-17: per-agent access ---
+class AgentMcpAccess(BaseModel):
+    """PUT body: the server's tools this agent may call."""
+
+    allowed_tools: list[str] = Field(min_length=1)
+
+    @field_validator("allowed_tools")
+    @classmethod
+    def valid_unique_tools(cls, tools: list[str]) -> list[str]:
+        return valid_tools(tools)
+
+
+class AgentMcpServer(BaseModel):
+    server_id: str
+    name: str
+    url: str
+    available_tools: list[str]  # everything the server offers
+    allowed_tools: list[str]  # what this agent may call
+
+
+class McpGrant(BaseModel):
+    """What the agent is told on each call (A2A params.metadata.guardrailHub.mcpServers).
+    Never credentials: the hub keeps them."""
+
+    id: str
+    name: str
+    url: str
+    allowed_tools: list[str] = Field(alias="allowedTools")
+
+    model_config = {"populate_by_name": True}
+
+    def for_agent(self) -> dict[str, object]:
+        return self.model_dump(by_alias=True)

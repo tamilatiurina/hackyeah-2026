@@ -45,6 +45,7 @@ from app.gateway.service import (
     get_guardrail_engine,
     send_guarded,
 )
+from app.mcp.agent_access import McpGrantLoader, get_gateway_mcp_loader, load_grants
 
 __all__ = ["get_gateway_http_client", "get_guardrail_engine", "router"]
 
@@ -94,6 +95,7 @@ async def forward_to_agent(
     engine: Annotated[GuardrailEngine, Depends(get_guardrail_engine)],
     client: Annotated[httpx.AsyncClient, Depends(get_gateway_http_client)],
     recorder: Annotated[AuditRecorder, Depends(get_audit_recorder)],
+    mcp: Annotated[McpGrantLoader, Depends(get_gateway_mcp_loader)],
 ) -> Response:
     if not key or not _is_uuid(agent_id):
         raise _unauthorized()
@@ -110,6 +112,7 @@ async def forward_to_agent(
     role, stripped = read_role(call)  # role bindings apply; a demo top-level role is removed
 
     policy = await run_in_threadpool(policies.load, agent_id, key, role)
+    grants = await run_in_threadpool(load_grants, mcp, agent_id, key)
     reply = await send_guarded(
         call,
         target=target,
@@ -119,6 +122,7 @@ async def forward_to_agent(
         audit=Audit(recorder=recorder, agent_id=agent_id, key=key),
         role=role,
         raw_body=None if stripped else body,
+        mcp_servers=[grant.for_agent() for grant in grants],
     )
     if reply.raw is not None:  # the agent's answer, byte for byte
         return Response(
