@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.bindings.models import Binding, BindingCreate, BindingUpdate, EffectivePolicy, ScopeType
 from app.bindings.repository import BindingRepository, get_binding_repository
-from app.bindings.resolve import resolve_for_request
+from app.bindings.resolve import resolve
 from app.guardrails.repository import GuardrailRepository, get_guardrail_repository
 
 router = APIRouter(tags=["bindings"])
@@ -96,4 +96,15 @@ def get_effective_guardrails(
     With no parameters it returns the mandatory guardrails only: the floor every request
     gets even when nothing is attached.
     """
-    return resolve_for_request(guardrails, repo, agent_id=agent_id, role=role, user_id=user_id)
+    selectors: list[tuple[ScopeType, str]] = []
+    if agent_id is not None:
+        selectors.append(("agent", agent_id))
+    if role is not None:
+        selectors.append(("role", role))
+    if user_id is not None:
+        selectors.append(("user", user_id))
+
+    scoped: list[Binding] = []
+    for scope_type, scope_id in selectors:
+        scoped.extend(repo.list(scope_type, scope_id))
+    return resolve(guardrails.list(), scoped, agent_id=agent_id, role=role, user_id=user_id)

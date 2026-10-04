@@ -15,17 +15,8 @@ Rules, in order:
 from collections.abc import Sequence
 from hashlib import sha256
 
-from app.bindings.models import (
-    SCOPE_RANK,
-    Binding,
-    EffectiveGuardrail,
-    EffectivePolicy,
-    ScopeType,
-    Source,
-)
-from app.bindings.repository import BindingRepository
+from app.bindings.models import SCOPE_RANK, Binding, EffectiveGuardrail, EffectivePolicy, Source
 from app.guardrails.models import Guardrail
-from app.guardrails.repository import GuardrailRepository
 
 
 def _matches(binding: Binding, agent_id: str | None, role: str | None, user_id: str | None) -> bool:
@@ -102,29 +93,3 @@ def resolve(
         input=[e for e in entries if "input" in e.guardrail.stages],
         output=[e for e in entries if "output" in e.guardrail.stages],
     )
-
-
-def resolve_for_request(
-    guardrails: GuardrailRepository,
-    bindings: BindingRepository,
-    agent_id: str | None = None,
-    role: str | None = None,
-    user_id: str | None = None,
-) -> EffectivePolicy:
-    """Read the catalog and resolve it for one request.
-
-    Shared by the gateway and GET /effective-guardrails so the two can never disagree about
-    which bindings a request matches. Blocking I/O: call it from a worker thread.
-    """
-    selectors: list[tuple[ScopeType, str]] = []
-    if agent_id is not None:
-        selectors.append(("agent", agent_id))
-    if role is not None:
-        selectors.append(("role", role))
-    if user_id is not None:
-        selectors.append(("user", user_id))
-
-    scoped: list[Binding] = []
-    for scope_type, scope_id in selectors:
-        scoped.extend(bindings.list(scope_type, scope_id))
-    return resolve(guardrails.list(), scoped, agent_id=agent_id, role=role, user_id=user_id)

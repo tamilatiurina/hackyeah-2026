@@ -3,7 +3,6 @@
 A2A 1.0 uses protobuf JSON: camelCase keys and enum values like "TASK_STATE_COMPLETED".
 """
 
-import uuid
 import json
 from typing import Any
 from uuid import uuid4
@@ -79,65 +78,6 @@ def guarded_card(upstream_card: Json, gateway_url: str) -> Json:
     }
     card["securityRequirements"] = [{"schemes": {API_KEY_SCHEME: {"list": []}}}]
     return card
-
-
-def result_container(result: Any) -> Json | None:
-    """Where hub metadata belongs in a SendMessage result: the message, or the task."""
-    if not isinstance(result, dict):
-        return None
-    for key in ("message", "task"):
-        value = result.get(key)
-        if isinstance(value, dict):
-            return value
-    return None
-
-
-def result_text_parts(result: Any) -> list[Json]:
-    """Every parts list in a reply that output guardrails may read, in reading order.
-
-    A message has one. A task has its artifacts' parts, then its status message's (contract
-    section 3). The dicts are the ones from the parsed reply, so rewriting them redacts it.
-    """
-    container = result_container(result)
-    if container is None:
-        return []
-    if isinstance(result, dict) and isinstance(result.get("message"), dict):
-        parts = container.get("parts")
-        return list(parts) if isinstance(parts, list) else []
-
-    collected: list[Json] = []
-    for artifact in container.get("artifacts") or []:
-        if isinstance(artifact, dict) and isinstance(artifact.get("parts"), list):
-            collected.extend(artifact["parts"])
-    status = container.get("status")
-    message = status.get("message") if isinstance(status, dict) else None
-    if isinstance(message, dict) and isinstance(message.get("parts"), list):
-        collected.extend(message["parts"])
-    return collected
-
-
-def rejected_task(rpc_id: Any, context_id: Any, text: str, metadata: Json) -> Json:
-    """A refusal the caller can read: a finished task in TASK_STATE_REJECTED (contract section 5).
-
-    Used when a guardrail blocks, so a blocked call is still a valid A2A answer rather than an
-    error the client has to special-case.
-    """
-    task: Json = {
-        "id": f"blk-{uuid.uuid4().hex[:12]}",
-        "status": {
-            "state": "TASK_STATE_REJECTED",
-            "message": {
-                "messageId": str(uuid.uuid4()),
-                "role": "ROLE_AGENT",
-                "parts": [{"text": text}],
-            },
-        },
-        "metadata": metadata,
-    }
-    if isinstance(context_id, str) and context_id:
-        task["contextId"] = context_id
-        task["status"]["message"]["contextId"] = context_id
-    return {"jsonrpc": JSONRPC_VERSION, "id": rpc_id, "result": {"task": task}}
 
 
 def is_valid_send_message_result(result: Any) -> bool:

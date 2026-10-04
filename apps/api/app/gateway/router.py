@@ -7,10 +7,6 @@ GET  /a/<agent id>/.well-known/agent-card.json
 
 POST /a/<agent id>
      Accepts A2A SendMessage (JSON-RPC 2.0). Checks the key in X-API-Key (missing or wrong ->
-     401), runs the resolved input guardrails, forwards the (possibly redacted) call to the
-     JSON-RPC interface from the upstream's own Agent Card, then runs the output guardrails.
-     The reply carries metadata.guardrailHub.trace. A block is a TASK_STATE_REJECTED task and
-     does not reach the agent. Other A2A methods get -32004; an unreachable upstream -32603.
      401), then forwards the call unchanged to the agent's JSON-RPC endpoint (upstream_url,
      taken from its card at registration) with A2A-Version: 1.0 and the stored auth header.
      The whole reply is read before answering. Other A2A methods get -32004; an unreachable
@@ -36,17 +32,11 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import HttpUrl, ValidationError
 
-from app.api.deps import get_role
 from app.api.routes.agents.deps import ensure_public_upstream
-from app.bindings.repository import BindingRepository, get_binding_repository_for_gateway
-from app.bindings.resolve import resolve_for_request
-from app.gateway import a2a, enforce
 from app.gateway import a2a
 from app.gateway.pipeline import GuardrailEngine, LocalEngine, StageOutcome, dump_trace, run_stage
 from app.gateway.policy import PolicyLoader, get_policy_loader
 from app.gateway.resolver import AgentResolver, get_agent_resolver
-from app.guardrails.repository import GuardrailRepository, get_guardrail_repository_for_gateway
-from app.store import store
 
 UPSTREAM_TIMEOUT_SECONDS = 30.0
 
@@ -135,10 +125,6 @@ async def agent_card(
     return JSONResponse(a2a.guarded_card(upstream_card, gateway_url))
 
 
-def _context_id(message: dict[str, Any]) -> Any:
-    return message.get("contextId")
-
-
 @router.post("/a/{agent_id}")
 async def forward_to_agent(
     agent_id: str,
@@ -148,9 +134,6 @@ async def forward_to_agent(
     policies: Annotated[PolicyLoader, Depends(get_policy_loader)],
     engine: Annotated[GuardrailEngine, Depends(get_guardrail_engine)],
     client: Annotated[httpx.AsyncClient, Depends(get_gateway_http_client)],
-    guardrails: Annotated[GuardrailRepository, Depends(get_guardrail_repository_for_gateway)],
-    bindings: Annotated[BindingRepository, Depends(get_binding_repository_for_gateway)],
-    header_role: Annotated[str | None, Depends(get_role)],
 ) -> Response:
     if not key or not _is_uuid(agent_id):
         raise _unauthorized()
@@ -172,28 +155,6 @@ async def forward_to_agent(
     params = call.get("params")
     if not isinstance(params, dict) or not isinstance(params.get("message"), dict):
         return _rpc_error(rpc_id, a2a.INVALID_PARAMS, "params.message is required")
-
-    caller, stripped = enforce.read_caller(call, header_role)
-    policy = await run_in_threadpool(
-        resolve_for_request, guardrails, bindings, agent_id, caller.role, caller.user_id
-    )
-    signatures = list(store.signatures.values())
-    message = params["message"]
-    incoming = await run_in_threadpool(
-        enforce.run_stage, policy, "input", message.get("parts"), signatures
-    )
-    if incoming.blocked:
-        hub = enforce.hub_metadata(policy, caller, incoming.trace, incoming.blocked)
-        return JSONResponse(
-            a2a.rejected_task(
-                rpc_id, _context_id(message), incoming.blocked.refusal(), {enforce.HUB_KEY: hub}
-            )
-        )
-
-    forward_body = json.dumps(call).encode() if stripped or incoming.rewritten else body
-
-    # --- forward to the upstream's JSON-RPC interface ---
-    auth: dict[str, str] = {}
     message = params["message"]
 
     # --- B-02: input guardrails ---
@@ -210,23 +171,6 @@ async def forward_to_agent(
     if target.auth_header_name and target.auth_header_value:
         headers[target.auth_header_name] = target.auth_header_value
     try:
-        interface_url = a2a.jsonrpc_interface_url(
-            await _upstream_card(client, target.upstream_url, auth)
-        )
-        if interface_url is None:
-            raise UpstreamError("Upstream Agent Card has no JSON-RPC interface")
-        response = await _send(
-            client,
-            "POST",
-            interface_url,
-            {
-                **auth,
-                "Content-Type": "application/json",
-                a2a.A2A_VERSION_HEADER: a2a.A2A_VERSION,
-            },
-            forward_body,
-        )
-        reply = response.json()
         response = await _post_upstream(client, target.upstream_url, headers, body)
     except UpstreamError as error:
         return _rpc_error(rpc_id, a2a.INTERNAL_ERROR, str(error), error.reason)
@@ -240,16 +184,6 @@ async def forward_to_agent(
             "invalid_response",
         )
 
-    if not isinstance(reply, dict):
-        return _rpc_error(rpc_id, a2a.INTERNAL_ERROR, "Upstream agent returned an invalid response")
-    if "error" in reply:
-        # The agent's own JSON-RPC error: passed through. Guardrails do not rewrite errors.
-        return Response(
-            content=response.content,
-            status_code=response.status_code,
-            media_type=response.headers.get("content-type", "application/json"),
-        )
-    if not a2a.is_valid_send_message_result(reply.get("result")):
     if not isinstance(reply, dict) or (
         "error" not in reply and not a2a.is_valid_send_message_result(reply.get("result"))
     ):
@@ -259,22 +193,6 @@ async def forward_to_agent(
             "Upstream agent returned an invalid response (a task must be finished)",
             "invalid_response",
         )
-
-    outgoing = await run_in_threadpool(
-        enforce.run_stage, policy, "output", a2a.result_text_parts(reply.get("result")), signatures
-    )
-    trace = [*incoming.trace, *outgoing.trace]
-    if outgoing.blocked:
-        hub = enforce.hub_metadata(policy, caller, trace, outgoing.blocked)
-        return JSONResponse(
-            a2a.rejected_task(
-                rpc_id, _context_id(message), outgoing.blocked.refusal(), {enforce.HUB_KEY: hub}
-            )
-        )
-    container = a2a.result_container(reply.get("result"))
-    if container is not None:
-        enforce.attach_hub(container, enforce.hub_metadata(policy, caller, trace))
-    return JSONResponse(reply)
     if not guarded or "error" in reply:
         # A result with no guardrails, or the agent's own JSON-RPC error: byte for byte.
         return Response(
