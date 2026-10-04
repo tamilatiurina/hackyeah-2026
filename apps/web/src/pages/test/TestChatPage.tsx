@@ -2,14 +2,14 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { Link } from 'react-router'
 import type { Reply, Verdict } from '../../api/a2a'
 import { useAgents } from '../../api/agents'
-import { ApiError } from '../../api/client'
 import { newContextId, useSendTestMessage } from '../../api/testChat'
 import { badgeClass, buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
 import { FlagReply } from './FlagReply'
 import { TracePanel } from './TracePanel'
 
 const CHIPS = ['#pii', '#secret', '#inject', '#toxic', '#offtopic']
-const ENDPOINT_MISSING = "The test chat endpoint isn't available on this API yet (B-06)."
+const SIMULATED =
+  "Simulated: the test chat endpoint (B-06) isn't on this API yet. Replies and guardrail results are generated in the browser and don't reach the agent."
 
 const VERDICTS: Record<Verdict, { label: string; className: string }> = {
   passed: { label: 'Passed', className: 'bg-teal-soft text-teal-dark' },
@@ -37,7 +37,6 @@ export function TestChatPage() {
   const [turns, setTurns] = useState<Turn[]>([])
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null)
   const [text, setText] = useState('')
-  const [endpointMissing, setEndpointMissing] = useState(false)
   const [showTrace, setShowTrace] = useState(false)
   const sendMessage = useSendTestMessage(agentId)
   const currentContext = useRef(contextId)
@@ -48,7 +47,8 @@ export function TestChatPage() {
   }, [contextId])
 
   const pending = turns.some((t) => t.status === 'pending')
-  const canSend = Boolean(agentId) && !pending && !endpointMissing
+  const canSend = Boolean(agentId) && !pending
+  const simulating = turns.some((t) => t.reply?.simulated)
 
   const updateTurn = (id: string, forContext: string, changes: Partial<Turn>) => {
     if (forContext !== currentContext.current) return // a late answer for a chat that was reset
@@ -66,12 +66,6 @@ export function TestChatPage() {
       {
         onSuccess: (reply) => updateTurn(turn.id, turn.contextId, { status: 'done', reply }),
         onError: (error) => {
-          if (turn.contextId !== currentContext.current) return
-          if (error instanceof ApiError && (error.status === 404 || error.status === 405)) {
-            setEndpointMissing(true)
-            setTurns((current) => current.filter((t) => t.id !== turn.id))
-            return
-          }
           updateTurn(turn.id, turn.contextId, { status: 'failed', failure: error.message })
         },
       },
@@ -84,7 +78,6 @@ export function TestChatPage() {
     setContextId(next)
     setTurns([])
     setSelectedTurnId(null)
-    setEndpointMissing(false)
   }
 
   const submit = (event?: FormEvent) => {
@@ -164,6 +157,10 @@ export function TestChatPage() {
               </button>
             </div>
 
+            {simulating && (
+              <p className="m-0 rounded-lg bg-warn-bg p-3 text-sm text-warn-fg">{SIMULATED}</p>
+            )}
+
             <ol
               aria-label="Conversation"
               className="m-0 flex min-h-48 list-none flex-col gap-3 rounded-xl border border-line bg-surface p-4"
@@ -188,12 +185,6 @@ export function TestChatPage() {
             <p data-testid="chat-live" aria-live="polite" className="sr-only">
               {liveText}
             </p>
-
-            {endpointMissing && (
-              <p role="alert" className="m-0 rounded-lg bg-warn-bg p-3 text-sm text-warn-fg">
-                {ENDPOINT_MISSING}
-              </p>
-            )}
 
             <form onSubmit={submit} className="flex flex-col gap-3">
               <label htmlFor="chat-message" className="text-[13px] font-semibold text-[#30343B]">
@@ -284,6 +275,7 @@ function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled, ag
             {errorText && <p className="m-0 text-sm text-danger">{errorText}</p>}
             <div className="flex flex-wrap items-center gap-2">
               {verdict && <span className={`${badgeClass} ${verdict.className}`}>{verdict.label}</span>}
+              {reply?.simulated && <span className={`${badgeClass} bg-canvas text-muted`}>Simulated</span>}
               {reply && (
                 <button
                   type="button"
@@ -295,7 +287,7 @@ function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled, ag
                   Inspect
                 </button>
               )}
-              {reply && reply.verdict !== 'error' && (
+              {reply && reply.verdict !== 'error' && !reply.simulated && (
                 <FlagReply
                   agentId={agentId}
                   contextId={turn.contextId}

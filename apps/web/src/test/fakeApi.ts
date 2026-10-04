@@ -1,8 +1,9 @@
 // Test double for the real guardrail and signature endpoints in apps/api: same paths, shapes and
 // error format ({detail}). The browser never uses it — MSW bypasses these paths to the real API.
 import { http, HttpResponse } from 'msw'
-import type { SendMessageRequest, SendMessageResponse, TraceEntry } from '../api/a2a'
+import type { SendMessageRequest } from '../api/a2a'
 import { apiPath } from '../api/client'
+import { simulateTestChat } from '../api/testChatSimulator'
 import type {
   Agent,
   AgentCard,
@@ -179,93 +180,6 @@ function effectiveFor(agentId: string): EffectiveGuardrail[] {
     .sort((x, y) => x.b.order_index - y.b.order_index || position(x.g.id) - position(y.g.id))
     .map(({ b, g }) => ({ guardrail: g, source: 'agent', binding_id: b.id, order_index: b.order_index }))
   return [...mandatory, ...bound]
-}
-
-const trace = (
-  name: string,
-  stage: TraceEntry['stage'],
-  verdict: TraceEntry['verdict'],
-  reason: string,
-  engine: TraceEntry['engine'] = 'regex',
-  simulated = false,
-): TraceEntry => ({
-  guardrailId: `gr-${name.toLowerCase().replace(/\W+/g, '-')}`,
-  guardrailName: name,
-  engine,
-  stage,
-  verdict,
-  reason,
-  latencyMs: 3,
-  ...(simulated ? { simulated } : {}),
-})
-
-const INJECTION_PASS = trace('Prompt injection detector', 'input', 'pass', 'No match')
-
-// Imitates the gateway in front of apps/test-agent (its triggers start the message).
-function fakeGateway(request: SendMessageRequest): SendMessageResponse {
-  const { message } = request.params
-  const text = message.parts.map((p) => ('text' in p ? p.text : '')).join('\n')
-  const contextId = message.contextId ?? 'ctx-new'
-  const usage = { inputTokens: text.split(/\s+/).length, outputTokens: 12, costUsd: 0.0002 }
-  const limits = [{ name: 'Session tokens', used: 24, max: 16000 }]
-  const reply = (replyText: string, runs: TraceEntry[]): SendMessageResponse => ({
-    jsonrpc: '2.0',
-    id: request.id,
-    result: {
-      message: {
-        messageId: `agent-${fakeApi.testChatRequests.length}`,
-        contextId,
-        role: 'ROLE_AGENT',
-        parts: [{ text: replyText }],
-        metadata: { guardrailHub: { trace: runs, usage, limits } },
-      },
-    },
-  })
-  const blocked = (stage: 'input' | 'output', runs: TraceEntry[], why: string): SendMessageResponse => ({
-    jsonrpc: '2.0',
-    id: request.id,
-    result: {
-      task: {
-        id: `blk-${fakeApi.testChatRequests.length}`,
-        contextId,
-        status: {
-          state: 'TASK_STATE_REJECTED',
-          message: { messageId: `agent-${fakeApi.testChatRequests.length}`, role: 'ROLE_AGENT', parts: [{ text: why }] },
-        },
-        metadata: { guardrailHub: { blocked: true, stage, trace: runs, usage, limits } },
-      },
-    },
-  })
-  switch (text.trim().split(/\s+/)[0]) {
-    case '#pii':
-      return reply('Reach me at [EMAIL] or [PHONE].', [
-        INJECTION_PASS,
-        trace('PII redaction', 'output', 'redact', 'Found EMAIL, PHONE', 'library'),
-      ])
-    case '#secret':
-      return reply('Use key [REDACTED].', [INJECTION_PASS, trace('Secret keys', 'output', 'redact', 'Matched /AKIA[0-9A-Z]{16}/')])
-    case '#inject':
-      return blocked(
-        'input',
-        [trace('Prompt injection detector', 'input', 'block', 'Matched injection signature: ignore-instructions')],
-        'Blocked by guardrail "Prompt injection detector": ignore-instructions signature matched.',
-      )
-    case '#toxic':
-      return blocked(
-        'output',
-        [INJECTION_PASS, trace('Toxicity filter', 'output', 'block', 'Simulated: Abusive language: idiot', 'moderation', true)],
-        'Blocked by guardrail "Toxicity filter".',
-      )
-    case '#offtopic':
-      return reply("Let's talk about elections and crypto.", [
-        INJECTION_PASS,
-        trace('Topic: orders and returns only', 'output', 'warn', 'Simulated: Mentions a denied topic: crypto', 'llm_judge', true),
-      ])
-    case '#error':
-      return { jsonrpc: '2.0', id: request.id, error: { code: -32603, message: 'Internal error' } }
-    default:
-      return reply(`You said: ${text}`, [INJECTION_PASS])
-  }
 }
 
 export const cardUnreachable = (baseUrl: string) =>
@@ -613,7 +527,7 @@ export const fakeApiHandlers = [
     if (!fakeApi.agents.some((a) => a.id === params.id)) return detail(404, 'Agent not found')
     const body = (await request.json()) as SendMessageRequest
     fakeApi.testChatRequests.push(body)
-    return HttpResponse.json(fakeGateway(body))
+    return HttpResponse.json(simulateTestChat(body, { serial: fakeApi.testChatRequests.length }))
   }),
 
   http.post(apiPath('/agents/:id/flags'), async ({ request }) => {

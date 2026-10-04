@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { readReply, type Reply, type SendMessageRequest, type SendMessageResponse } from './a2a'
-import { postJson } from './client'
+import { ApiError, postJson } from './client'
+import { simulateTestChat } from './testChatSimulator'
 
 const enc = encodeURIComponent
 
@@ -18,6 +19,8 @@ export function newContextId(): string {
   return `ctx-${randomId()}`
 }
 
+let simulatedReplies = 0
+
 export function useSendTestMessage(agentId: string) {
   return useMutation({
     mutationFn: async ({ text, contextId }: { text: string; contextId: string }): Promise<Reply> => {
@@ -28,8 +31,17 @@ export function useSendTestMessage(agentId: string) {
         method: 'SendMessage',
         params: { message: { messageId, contextId, role: 'ROLE_USER', parts: [{ text }] } },
       }
-      const response = await postJson<SendMessageResponse>(`/agents/${enc(agentId)}/test-chat`, request)
-      return readReply(response, `err-${messageId}`)
+      try {
+        const response = await postJson<SendMessageResponse>(`/agents/${enc(agentId)}/test-chat`, request)
+        return readReply(response, `err-${messageId}`)
+      } catch (error) {
+        // 404/405: this API has no test chat endpoint yet (B-06). Answer from the simulator instead,
+        // marked simulated everywhere. Remove this fallback with testChatSimulator once B-06 ships.
+        if (!(error instanceof ApiError && (error.status === 404 || error.status === 405))) throw error
+        await new Promise((resolve) => setTimeout(resolve, 250 + Math.random() * 250))
+        const simulated = simulateTestChat(request, { serial: ++simulatedReplies, markSimulated: true })
+        return { ...readReply(simulated, `err-${messageId}`), simulated: true }
+      }
     },
   })
 }

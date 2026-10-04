@@ -93,13 +93,22 @@ describe('Test chat', () => {
     expect(fakeApi.testChatRequests[1].params.message.parts).toEqual([{ text: '#error' }])
   })
 
-  it('explains when the test chat endpoint does not exist yet', async () => {
+  it('simulates the guarded agent while the test chat endpoint does not exist yet', async () => {
     fakeApi.testChatSupported = false
     const user = await open()
-    await user.type(screen.getByLabelText('Message'), 'hi{Enter}')
-    expect(await screen.findByText("The test chat endpoint isn't available on this API yet (B-06).")).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '#pii' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '#pii' }))
+    expect(await screen.findByText(/Simulated: the test chat endpoint \(B-06\) isn't on this API yet/)).toBeInTheDocument()
+    await waitFor(() => expect(lastReply().getByText('Redacted')).toBeInTheDocument())
+    expect(lastReply().getByText('Reach me at [EMAIL] or [PHONE].')).toBeInTheDocument()
+    expect(lastReply().getByText('Simulated')).toBeInTheDocument()
+    expect(lastReply().queryByRole('button', { name: /Flag reply/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '#inject' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: '#inject' }))
+    await waitFor(() => expect(lastReply().getByText('Blocked')).toBeInTheDocument())
+    expect(fakeApi.testChatRequests).toEqual([]) // the API never answered: all simulated
+    const trace = within(screen.getByRole('region', { name: 'Trace' }))
+    expect(trace.getAllByText('Simulated').length).toBeGreaterThan(0)
   })
 
   it('asks to register an agent when there are none', async () => {
