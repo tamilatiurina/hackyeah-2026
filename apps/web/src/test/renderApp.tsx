@@ -21,17 +21,19 @@ interface RenderOptions {
   anonymousEnabled?: boolean
   /** Top-level work context ('panel' | 'agent'); default 'panel'. */
   mode?: Mode
+  /** Fake Supabase Realtime (on by default). */
+  realtime?: boolean
 }
 
 export function renderApp(
   path: string,
   role?: Role,
-  { signedIn = true, guest = false, anonymousEnabled = true, mode }: RenderOptions = {},
+  { signedIn = true, guest = false, anonymousEnabled = true, mode, realtime = true }: RenderOptions = {},
 ) {
   if (role) localStorage.setItem(ROLE_STORAGE_KEY, role)
   if (mode) localStorage.setItem(MODE_STORAGE_KEY, mode)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const auth = createFakeAuth({ signedIn, anonymousEnabled })
+  const auth = createFakeAuth({ signedIn, anonymousEnabled, realtime })
   const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>

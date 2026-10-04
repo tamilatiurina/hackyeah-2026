@@ -116,6 +116,7 @@ export function AuthProvider({ client, initialSession, guest = false, children }
       notice: notice ?? (guestError ? `Couldn't start a guest session: ${guestError}` : null),
       signIn,
       signOut,
+      watchTables: client?.watchTables ?? null,
     }),
     [status, session, client, notice, guestError, signIn, signOut],
   )

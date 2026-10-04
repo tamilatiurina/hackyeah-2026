@@ -16,4 +16,11 @@ export interface AuthClient {
   /** Starts a guest session. Resolves to an error message, or null on success. */
   signInAnonymously(): Promise<string | null>
   signOut(): Promise<void>
+  /** Realtime (#102): calls onChange when rows of these tables change (RLS applies), and onStatus
+   * with whether the subscription is live. Returns the unsubscribe. Absent without realtime. */
+  watchTables?(
+    tables: readonly string[],
+    onChange: () => void,
+    onStatus: (live: boolean) => void,
+  ): () => void
 }

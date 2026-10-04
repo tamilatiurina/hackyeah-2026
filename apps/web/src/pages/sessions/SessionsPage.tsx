@@ -1,10 +1,11 @@
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router'
 import { useAgents } from '../../api/agents'
-import { useSessions } from '../../api/audit'
+import { useLiveRefresh, useSessions } from '../../api/audit'
 import type { AgentSession, SessionFilters } from '../../api/types'
 import { buttonSecondary, inputClass, pillClass } from '../../ui/classes'
 import { formatCost, formatDuration, formatRelative, formatTime, shortId } from '../../ui/format'
+import { LiveBadge } from '../../ui/LiveBadge'
 import { LoadError } from '../ApiUnavailable'
 
 const HEADERS = ['Agent', 'Session', 'Started', 'Turns', 'Tokens (in / out)', 'Cost', 'Duration', 'Status', 'Events']
@@ -17,6 +18,8 @@ export function SessionsPage() {
   const [open, setOpen] = useState<string | null>(null)
   const sessions = useSessions(filters)
   const agents = useAgents()
+  // audit_events too: a session's "N events" count changes when an event is recorded.
+  const live = useLiveRefresh(['agent_sessions', 'audit_events'], [['sessions']])
   const list = sessions.data?.pages.flatMap((page) => page.data) ?? []
   const agentName = (s: AgentSession) => s.agent_name ?? agents.data?.find((a) => a.id === s.agent_id)?.name ?? s.agent_id
 
@@ -126,7 +129,10 @@ export function SessionsPage() {
             One row per A2A conversation (contextId) through the guarded URL. Counters only, no message content.
           </p>
         </div>
-        <button type="button" className={buttonSecondary} onClick={() => void sessions.refetch()}>Refresh</button>
+        <div className="flex items-center gap-3">
+          {live && <LiveBadge />}
+          <button type="button" className={buttonSecondary} onClick={() => void sessions.refetch()}>Refresh</button>
+        </div>
       </header>
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex min-w-48 flex-col gap-1.5">

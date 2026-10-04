@@ -1,4 +1,6 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useAuth } from '../auth/context'
 import { ApiError, getJson } from './client'
 import type { AuditEventPage, AuditFilters, AuditRule, SessionFilters, SessionPage } from './types'
 
@@ -41,4 +43,36 @@ export function useSessions(filters: SessionFilters) {
     queryFn: ({ pageParam }) => getJson<SessionPage>(withQuery('/sessions', { ...filters, before: pageParam })),
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   })
+}
+
+/** #102: refetch these queries when rows of these tables change (Supabase Realtime, RLS applies).
+ * A burst of changes causes one refetch. Returns whether the subscription is live; without realtime
+ * it stays false and the page's Refresh button is the way to update. */
+export function useLiveRefresh(tables: readonly string[], queryKeys: readonly QueryKey[]): boolean {
+  const { watchTables } = useAuth()
+  const queryClient = useQueryClient()
+  const [live, setLive] = useState(false)
+  // Callers pass literals; compare by value so a new array each render doesn't resubscribe.
+  const tablesKey = JSON.stringify(tables)
+  const queryKeysKey = JSON.stringify(queryKeys)
+
+  useEffect(() => {
+    if (!watchTables) return
+    const keys = JSON.parse(queryKeysKey) as QueryKey[]
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const stop = watchTables(
+      JSON.parse(tablesKey) as string[],
+      () => {
+        clearTimeout(timer)
+        timer = setTimeout(() => keys.forEach((queryKey) => void queryClient.invalidateQueries({ queryKey })), 300)
+      },
+      setLive,
+    )
+    return () => {
+      clearTimeout(timer)
+      stop()
+    }
+  }, [watchTables, tablesKey, queryKeysKey, queryClient])
+
+  return live
 }

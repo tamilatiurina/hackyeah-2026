@@ -1,9 +1,10 @@
 import { useSearchParams } from 'react-router'
 import { useAgents } from '../../api/agents'
-import { useAuditEvents, useAuditRules } from '../../api/audit'
+import { useAuditEvents, useAuditRules, useLiveRefresh } from '../../api/audit'
 import type { AuditAction, AuditEvent, AuditFilters } from '../../api/types'
 import { badgeClass, buttonSecondary, inputClass } from '../../ui/classes'
 import { formatTime, shortId } from '../../ui/format'
+import { LiveBadge } from '../../ui/LiveBadge'
 import { LoadError } from '../ApiUnavailable'
 
 const ACTIONS: Record<AuditAction, { label: string; className: string }> = {
@@ -32,6 +33,7 @@ export function AuditLogPage() {
   const events = useAuditEvents(filters)
   const rules = useAuditRules()
   const agents = useAgents()
+  const live = useLiveRefresh(['audit_events'], [['audit-events'], ['audit-rules']])
   const filtered = FILTER_KEYS.some((key) => filters[key])
 
   const setFilter = (key: (typeof FILTER_KEYS)[number], value: string) => {
@@ -111,7 +113,10 @@ export function AuditLogPage() {
           <h1 className="m-0 text-[28px] font-semibold tracking-tight">Audit log</h1>
           <p className="m-0 text-[15px] text-muted">Every block, redaction, warning and limit hit, newest first.</p>
         </div>
-        <button type="button" className={buttonSecondary} onClick={() => void events.refetch()}>Refresh</button>
+        <div className="flex items-center gap-3">
+          {live && <LiveBadge />}
+          <button type="button" className={buttonSecondary} onClick={() => void events.refetch()}>Refresh</button>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-end gap-3">

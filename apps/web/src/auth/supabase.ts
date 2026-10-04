@@ -16,7 +16,8 @@ export function createAuthClient(): AuthClient | null {
   const url = import.meta.env.SUPABASE_URL
   const key = import.meta.env.SUPABASE_KEY
   if (!url || !key) return null
-  const { auth } = createClient(url, key)
+  const supabase = createClient(url, key)
+  const { auth } = supabase
   return {
     async getSession() {
       const { data } = await auth.getSession()
@@ -37,6 +38,18 @@ export function createAuthClient(): AuthClient | null {
     async signInAnonymously() {
       const { error } = await auth.signInAnonymously()
       return error ? error.message : null
+    },
+    watchTables(tables, onChange, onStatus) {
+      // The client sends the signed-in user's token to Realtime, so RLS limits what is heard.
+      const channel = supabase.channel(`live-${tables.join('-')}-${Math.random().toString(36).slice(2)}`)
+      for (const table of tables) {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => onChange())
+      }
+      channel.subscribe((status) => onStatus(status === 'SUBSCRIBED'))
+      return () => {
+        onStatus(false)
+        void supabase.removeChannel(channel)
+      }
     },
     async signOut() {
       // Local: only this browser. A global sign-out would also revoke other devices' sessions.
