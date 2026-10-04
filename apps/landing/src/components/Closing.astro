@@ -1,0 +1,33 @@
+---
+import Logo from './Logo.astro'
+
+interface Props {
+  appUrl: string
+}
+const { appUrl } = Astro.props
+---
+
+<section class="bg-ink text-white on-dark">
+  <div class="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-20 sm:px-6 md:flex-row md:items-end md:justify-between">
+    <div class="max-w-xl">
+      <h2 class="text-3xl leading-tight font-semibold tracking-tight text-balance">
+        Put your first agent behind a guarded URL.
+      </h2>
+      <p class="mt-4 leading-relaxed text-[#b4b8bf]">
+        Bring any A2A 1.0 agent. The repo includes a test agent with messages that trigger each
+        kind of guardrail, so you can see blocks and redactions straight away.
+      </p>
+    </div>
+    <a class="btn bg-teal-bright text-ink hover:bg-white" href={appUrl}>Open Guardrail Hub</a>
+  </div>
+</section>
+
+<footer class="bg-ink text-sm text-[#a3a7ae]">
+  <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 border-t border-console-line px-4 py-6 sm:px-6">
+    <span class="flex items-center gap-2 text-white">
+      <Logo class="text-teal-bright" />
+      Guardrail Hub
+    </span>
+    <span>Built at HackYeah 2026</span>
+  </div>
+</footer>

@@ -1,0 +1,87 @@
+---
+const rejected = `{
+  "jsonrpc": "2.0",
+  "id": "req-1",
+  "result": {
+    "task": {
+      "contextId": "ctx-42",
+      "status": {
+        "state": "TASK_STATE_REJECTED",
+        "message": {
+          "role": "ROLE_AGENT",
+          "parts": [{ "text": "Blocked by guardrail …" }]
+        }
+      },
+      "metadata": {
+        "guardrailHub": {
+          "blocked": true,
+          "stage": "input",
+          "trace": [ … ]
+        }
+      }
+    }
+  }
+}`
+---
+
+<section id="a2a" class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+  <div class="grid gap-12 lg:grid-cols-[1fr_1.2fr] lg:gap-16">
+    <div class="max-w-md">
+      <h2 class="text-3xl leading-tight font-semibold tracking-tight text-balance">
+        Your app changes one URL.
+      </h2>
+      <p class="mt-5 leading-relaxed text-muted">
+        Agents and the hub both speak the open{' '}
+        <a
+          class="text-teal underline underline-offset-2 hover:text-teal-dark"
+          href="https://a2a-protocol.org/v1.0.0/specification/">A2A 1.0</a
+        >{' '}
+        protocol. The guarded URL serves the same Agent Card and accepts the same{' '}
+        <code class="font-mono text-[0.875em]">SendMessage</code>{' '}
+        call as the agent behind it, so any A2A client switches over without code changes.
+      </p>
+      <p class="mt-4 leading-relaxed text-muted">
+        A blocked call comes back as an ordinary rejected task with the reason. The trace rides
+        along in{' '}
+        <code class="font-mono text-[0.875em]">metadata</code>, and clients that don’t know about
+        it ignore it.
+      </p>
+    </div>
+
+    <div class="grid min-w-0 gap-4">
+      <div class="diff on-dark" aria-label="Configuration change">
+        <pre><code><span class="del">- AGENT_URL=https://support-bot.internal.acme.dev</span>
+<span class="add">+ AGENT_URL=https://hub.acme.dev/a/support-bot</span>
+<span class="add">+ AGENT_API_KEY=ghk_••••••••••••</span></code></pre>
+      </div>
+      <div class="diff on-dark">
+        <pre><code>{rejected}</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .diff {
+    background: var(--color-console);
+    color: #d6d8dc;
+    border-radius: 0.75rem;
+    overflow-x: auto;
+  }
+
+  .diff pre {
+    margin: 0;
+    padding: 1.125rem 1.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.65;
+  }
+
+  .del {
+    color: var(--color-danger-bright);
+  }
+
+  .add {
+    color: var(--color-teal-bright);
+  }
+</style>

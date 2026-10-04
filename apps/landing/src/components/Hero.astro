@@ -1,0 +1,30 @@
+---
+import TraceDemo from './TraceDemo.astro'
+
+interface Props {
+  appUrl: string
+}
+const { appUrl } = Astro.props
+---
+
+<section id="top" class="mx-auto max-w-6xl px-4 pt-14 pb-20 sm:px-6 lg:pt-24 lg:pb-28">
+  <div class="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
+    <div class="max-w-xl">
+      <h1
+        class="text-[2.5rem] leading-[1.05] font-semibold tracking-[-0.03em] text-balance sm:text-[3.5rem]"
+      >
+        Guardrails for every AI agent your company runs.
+      </h1>
+      <p class="mt-6 text-lg leading-relaxed text-muted text-pretty">
+        Register an agent by its URL, attach the checks your company needs, and hand out a guarded
+        URL in its place. Every message is checked on the way in and on the way out, and the
+        agent’s code never changes.
+      </p>
+      <div class="mt-9 flex flex-wrap gap-3">
+        <a class="btn btn-primary" href={appUrl}>Open Guardrail Hub</a>
+        <a class="btn btn-secondary" href="#how">See how a request flows</a>
+      </div>
+    </div>
+    <TraceDemo />
+  </div>
+</section>

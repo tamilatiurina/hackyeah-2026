@@ -1,0 +1,54 @@
+---
+const features = [
+  {
+    title: 'Guardrails from templates',
+    body: 'PII, prompt injection, toxicity, topic allow and deny lists, regex, or an LLM judge with your own prompt. Each one runs on input, output or both, and blocks, redacts or warns.',
+  },
+  {
+    title: 'Policies',
+    body: 'Group guardrails into a named policy and attach it as one unit. Change the policy once and every agent that carries it follows.',
+  },
+  {
+    title: 'A company baseline nobody can remove',
+    body: 'Admins mark policies as mandatory. They attach to every existing and future agent, run first, and developers can’t detach them. Exemptions need a written reason.',
+  },
+  {
+    title: 'Budgets and time limits',
+    body: 'Cap tokens and cost per call and per session, set a per-call timeout and a maximum session length, and choose whether going over blocks or warns.',
+  },
+  {
+    title: 'An effective policy you can read',
+    body: 'Company defaults, per-agent overrides and the mandatory layer combine into one effective policy. Each agent page shows every rule and where it came from.',
+  },
+  {
+    title: 'Audit log',
+    body: 'Every block, redaction, warning and limit hit is recorded with its rule id and config version. Filter by agent, rule or action.',
+  },
+  {
+    title: 'A testing chat for non-developers',
+    body: 'Business owners and QA chat with the guarded agent and see the trace for each message, then flag answers that miss the requirements.',
+  },
+  {
+    title: 'Shared injection signatures',
+    body: 'One company-wide list of prompt-injection patterns that admins keep up to date, used by every prompt-injection guardrail.',
+  },
+]
+---
+
+<section id="features" class="border-y border-line bg-surface">
+  <div class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+    <h2 class="max-w-2xl text-3xl leading-tight font-semibold tracking-tight text-balance">
+      Set the rules once. Every agent follows them.
+    </h2>
+    <dl class="mt-12 grid gap-x-16 sm:grid-cols-2">
+      {
+        features.map((f) => (
+          <div class="border-t border-line py-7">
+            <dt class="text-lg font-semibold">{f.title}</dt>
+            <dd class="mt-2 max-w-prose leading-relaxed text-muted">{f.body}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </div>
+</section>

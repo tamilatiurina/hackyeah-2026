@@ -59,3 +59,17 @@ jobs:
       # --include-all: migrations from parallel branches can land with an older timestamp than one
       # already applied; apply them too instead of refusing the whole push.
       - run: supabase db push --include-all --password "$SUPABASE_DB_PASSWORD" --workdir apps/api
+
+  landing:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/landing } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/landing/package.json
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm, cache-dependency-path: apps/landing/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm build

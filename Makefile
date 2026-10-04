@@ -1,16 +1,20 @@
-.PHONY: install api web cli test-agent lint test supabase supabase-stop seed-sandbox
+.PHONY: install api web landing cli test-agent lint test supabase supabase-stop seed-sandbox
 
 SUPABASE = pnpm dlx supabase@2.119.0
 
 install:
 	uv sync --all-packages
 	cd apps/web && pnpm install
+	cd apps/landing && pnpm install
 
 api:
 	cd apps/api && uv run uvicorn app.main:app --reload --port 8000
 
 web:
 	cd apps/web && pnpm dev
+
+landing:
+	cd apps/landing && pnpm dev
 
 cli:
 	uv run acme --help

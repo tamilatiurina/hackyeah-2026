@@ -1,0 +1,71 @@
+---
+type Access = 'yes' | 'own' | 'no'
+
+const rows: { action: string; admin: Access; dev: Access; tester: Access }[] = [
+  { action: 'Define mandatory company-wide policies', admin: 'yes', dev: 'no', tester: 'no' },
+  { action: 'Register, edit and delete agents', admin: 'yes', dev: 'own', tester: 'no' },
+  { action: 'Create guardrails and policies', admin: 'yes', dev: 'yes', tester: 'no' },
+  { action: 'Set budgets and time limits', admin: 'yes', dev: 'own', tester: 'no' },
+  { action: 'Deploy a guarded URL', admin: 'yes', dev: 'own', tester: 'no' },
+  { action: 'Chat with agents and read traces', admin: 'yes', dev: 'yes', tester: 'yes' },
+  { action: 'Read the audit log', admin: 'yes', dev: 'own', tester: 'no' },
+]
+
+const label: Record<Access, string> = { yes: 'Yes', own: 'Own agents', no: 'No' }
+---
+
+<section id="roles" class="border-t border-line bg-surface">
+  <div class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+    <div class="grid gap-12 lg:grid-cols-[1fr_1.6fr] lg:gap-16">
+      <div class="max-w-md">
+        <h2 class="text-3xl leading-tight font-semibold tracking-tight text-balance">
+          Admins set the floor, developers build on it, testers check it.
+        </h2>
+        <p class="mt-5 leading-relaxed text-muted">
+          Developers can add rules and tighten limits on their own agents. Only admins can loosen
+          or remove a mandatory rule, and testers can use agents but never change them.
+        </p>
+      </div>
+
+      <div class="min-w-0 overflow-x-auto">
+        <table class="w-full min-w-[32rem] border-collapse text-left text-[0.9375rem]">
+          <thead>
+            <tr class="border-b-2 border-ink">
+              <th scope="col" class="py-3 pr-4 font-semibold">Action</th>
+              <th scope="col" class="px-3 py-3 font-semibold">Admin</th>
+              <th scope="col" class="px-3 py-3 font-semibold">Developer</th>
+              <th scope="col" class="py-3 pl-3 font-semibold">Tester</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              rows.map((r) => (
+                <tr class="border-b border-line">
+                  <th scope="row" class="py-3 pr-4 font-normal">{r.action}</th>
+                  {[r.admin, r.dev, r.tester].map((a, i) => (
+                    <td
+                      class:list={[
+                        'py-3',
+                        i === 2 ? 'pl-3' : 'px-3',
+                        a === 'no' ? 'text-muted' : 'text-teal-dark',
+                      ]}
+                    >
+                      {a === 'no' ? (
+                        <>
+                          <span aria-hidden="true">—</span>
+                          <span class="sr-only">No</span>
+                        </>
+                      ) : (
+                        label[a]
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

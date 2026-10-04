@@ -8,6 +8,7 @@ Monorepo with three apps and one shared library:
 - `apps/api` – FastAPI backend (Python package `acme-api`, module `acme_api`)
 - `apps/cli` – Typer CLI (Python package `acme-cli`, module `acme_cli`, command `acme`)
 - `apps/web` – React + Vite + TypeScript frontend (pnpm project, NOT part of the uv workspace)
+- `apps/landing` – static Astro marketing page (pnpm project, NOT part of the uv workspace; the Web rules below apply to it too)
 - `packages/core` – shared Python library (package `acme-core`, module `acme_core`) used by API and CLI
 - `packages/pi-control-layer` – the AI Control Layer pi extension (`control-layer.ts`), its policy format (`policy.schema.json`) and a seed policy (`policy.json.example`). It enforces policy on agent tool calls and reports audit events to the control plane over websocket.
 
@@ -21,6 +22,7 @@ Run all commands from the repo root unless stated otherwise.
 make install                      # install all Python + web deps
 make api                          # run API on :8000 (auto-reload)
 make web                          # run web dev server on :5173
+make landing                      # run Astro landing page on :4321
 make lint                         # ruff check + ruff format --check + mypy
 make test                         # pytest
 
@@ -66,8 +68,8 @@ cd apps/web && pnpm build         # type-check + production build
 
 1. `make lint` passes
 2. `make test` passes
-3. If web code changed: `cd apps/web && pnpm lint && pnpm build` passes
-4. Lockfiles (`uv.lock`, `apps/web/pnpm-lock.yaml`) are updated if dependencies changed
+3. If web code changed: `cd apps/web && pnpm lint && pnpm build` passes (same in `apps/landing` if it changed)
+4. Lockfiles (`uv.lock`, `apps/web/pnpm-lock.yaml`, `apps/landing/pnpm-lock.yaml`) are updated if dependencies changed
 
 ## Git
 
