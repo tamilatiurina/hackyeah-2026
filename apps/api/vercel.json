@@ -1,7 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "bash build.sh",
-  "includeFiles": "node_modules/**,pi-control-layer/**",
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "node_modules/**,pi-control-layer/**"
+    }
+  },
   "headers": [
     {
       "source": "/api/v1/pi/playground/injection-page",
