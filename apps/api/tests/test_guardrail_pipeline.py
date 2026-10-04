@@ -25,6 +25,7 @@ from app.gateway.resolver import UpstreamTarget, get_agent_resolver
 from app.guardrails.models import DryRunResult, Guardrail, Stage
 from app.main import app
 from app.mcp.agent_access import InMemoryAgentMcpRepository, get_gateway_mcp_loader
+from app.mcp.capabilities import issue_receipt, read_capability
 from app.mcp.models import McpGrant, McpServerCreate
 from app.mcp.repository import InMemoryMcpServerRepository
 from fastapi.testclient import TestClient
@@ -376,10 +377,23 @@ class Recorder(httpx.AsyncBaseTransport):
     def __init__(self) -> None:
         self.inner = httpx.ASGITransport(app=create_test_agent(public_url=BASE_URL))
         self.bodies: list[dict[str, Any]] = []
+        self.receipt_tool: str | None = None
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        self.bodies.append(json.loads(request.content))
-        return await self.inner.handle_async_request(request)
+        sent = json.loads(request.content)
+        self.bodies.append(sent)
+        response = await self.inner.handle_async_request(request)
+        if self.receipt_tool is None:
+            return response
+        await response.aread()
+        descriptor = sent["params"]["metadata"]["guardrailHub"]["mcpServers"][0]
+        capability = read_capability(descriptor["capabilityToken"])
+        receipt = issue_receipt(capability, self.receipt_tool, "allowed", 8.25)
+        reply = json.loads(response.content)
+        reply["result"]["message"].setdefault("metadata", {})["guardrailHub"] = {
+            "mcpReceipts": [receipt]
+        }
+        return httpx.Response(response.status_code, json=reply)
 
 
 @pytest.fixture(autouse=True)
@@ -635,7 +649,7 @@ def grant_orders(tools: list[str]) -> None:
             {
                 "name": "Orders",
                 "url": "https://mcp.acme.dev/orders",
-                "auth": {"type": "api_key", "header": "X-Key", "api_key": "sk-orders-secret"},
+                "auth": {"type": "none"},
                 "allowed_tools": ["get_order", "list_orders", "refund"],
             }
         ),
@@ -648,15 +662,22 @@ def test_the_agent_receives_its_mcp_servers_and_only_its_tools(gateway: Recorder
     use(policy(), StubEngine({}))
     say("hello")
     sent = gateway.bodies[0]
-    assert sent["params"]["metadata"]["guardrailHub"]["mcpServers"] == [
-        {
-            "id": "mcp-orders",
-            "name": "Orders",
-            "url": "https://mcp.acme.dev/orders",
-            "allowedTools": ["get_order", "refund"],
-        }
-    ]
-    assert "sk-orders-secret" not in json.dumps(sent)  # credentials stay in the hub
+    [descriptor] = sent["params"]["metadata"]["guardrailHub"]["mcpServers"]
+    assert descriptor.keys() == {
+        "id",
+        "name",
+        "url",
+        "transport",
+        "allowedTools",
+        "capabilityToken",
+    }
+    assert descriptor["url"] == "http://testserver/mcp-proxy/"
+    assert descriptor["transport"] == "streamable-http"
+    assert descriptor["allowedTools"] == ["get_order", "refund"]
+    capability = read_capability(descriptor["capabilityToken"])
+    assert capability.backend_url == "https://mcp.acme.dev/orders"
+    assert capability.agent_id == AGENT_ID
+    assert "mcp.acme.dev" not in json.dumps(sent)
     assert sent["params"]["message"]["parts"] == [{"text": "hello"}]
 
 
@@ -664,6 +685,26 @@ def test_without_mcp_access_the_call_is_forwarded_unchanged(gateway: Recorder) -
     use(policy(), StubEngine({}))
     say("hello")
     assert "metadata" not in gateway.bodies[0]["params"]
+
+
+def test_verified_mcp_receipt_is_published_even_without_guardrails(gateway: Recorder) -> None:
+    grant_orders(["get_order"])
+    gateway.receipt_tool = "get_order"
+    use(policy(), StubEngine({}))
+
+    reply = say("where is order 48213?")
+
+    hub = reply["result"]["message"]["metadata"]["guardrailHub"]
+    assert hub["mcpTrace"] == [
+        {
+            "serverId": "mcp-orders",
+            "serverName": "Orders",
+            "toolName": "get_order",
+            "status": "allowed",
+            "latencyMs": 8.25,
+        }
+    ]
+    assert "mcpReceipts" not in hub
 
 
 def test_mcp_access_that_cannot_be_read_means_no_servers(gateway: Recorder) -> None:

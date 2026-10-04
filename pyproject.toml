@@ -17,7 +17,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["apps/cli", "apps/test-agent", "packages/*"]
+members = ["apps/agents", "apps/cli", "apps/test-agent", "packages/*"]
 # apps/api is a standalone uv project; pi-control-layer is TypeScript, not a Python package.
 exclude = ["apps/api", "packages/pi-control-layer"]
 
@@ -30,7 +30,7 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages", "apps/cli", "apps/test-agent"]
+testpaths = ["packages", "apps/agents/tests", "apps/cli", "apps/test-agent"]
 
 [tool.mypy]
 strict = true

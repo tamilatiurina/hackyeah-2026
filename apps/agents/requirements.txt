@@ -1,4 +1,6 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
-anthropic>=0.40
+anthropic>=1.11
+httpx2>=2.13.1
+mcp>=2,<3
 pydantic>=2.7

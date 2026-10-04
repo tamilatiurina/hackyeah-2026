@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { fakeApi } from '../../test/fakeApi'
 import { renderApp } from '../../test/renderApp'
+import { TracePanel } from './TracePanel'
 
 const panel = () => within(screen.getByRole('region', { name: 'Trace' }))
 
@@ -48,6 +49,29 @@ describe('Trace panel', () => {
     const user = await open()
     await user.type(screen.getByLabelText('Message'), '#error{Enter}')
     expect(await panel().findByText('No guardrails ran for this reply.')).toBeInTheDocument()
+  })
+
+  it('shows verified MCP calls in a separate table', () => {
+    render(
+      <TracePanel
+        reply={{
+          messageId: 'mcp-1',
+          text: 'Order found',
+          verdict: 'passed',
+          trace: [],
+          mcpTrace: [
+            { serverId: 'orders', serverName: 'Orders', toolName: 'get_order', status: 'allowed', latencyMs: 8.25 },
+          ],
+          limits: [],
+          scores: [],
+        }}
+      />,
+    )
+
+    const table = within(screen.getByRole('region', { name: 'Trace' })).getByRole('table')
+    expect(within(table).getByText('Orders')).toBeInTheDocument()
+    expect(within(table).getByText('get_order')).toBeInTheDocument()
+    expect(within(table).getByText('Allowed')).toBeInTheDocument()
   })
 })
 

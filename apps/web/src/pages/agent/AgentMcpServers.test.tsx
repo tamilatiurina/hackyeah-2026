@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { fakeApi } from '../../test/fakeApi'
 import { renderApp } from '../../test/renderApp'
 
@@ -14,6 +14,11 @@ async function open() {
 const access = () => fakeApi.mcpAccess.filter((a) => a.agent_id === 'agent-support')
 
 describe('Agent MCP servers (FR-17)', () => {
+  beforeEach(() => {
+    const orders = fakeApi.mcpServers.find((server) => server.id === 'mcp-orders')
+    if (orders) orders.auth = { type: 'none', scopes: [], has_secret: false }
+  })
+
   it('adds a registered server with all of its tools', async () => {
     const { user, section } = await open()
     expect(await section.findByText('This agent has no MCP servers yet.')).toBeInTheDocument()
@@ -64,5 +69,27 @@ describe('Agent MCP servers (FR-17)', () => {
     const { section } = await open()
     expect(await section.findByText(/No MCP servers are registered yet/)).toBeInTheDocument()
     expect(section.getByRole('link', { name: 'Register one' })).toHaveAttribute('href', '/mcp')
+  })
+
+  it('does not offer authenticated backends for attachment', async () => {
+    const orders = fakeApi.mcpServers.find((server) => server.id === 'mcp-orders')
+    if (orders) orders.auth = { type: 'api_key', header: 'X-Key', scopes: [], has_secret: true }
+
+    const { section } = await open()
+
+    expect(
+      await section.findByText(/Orders cannot be attached because authenticated MCP backends/),
+    ).toBeInTheDocument()
+    expect(section.queryByLabelText('Add MCP server')).not.toBeInTheDocument()
+  })
+
+  it('requires the Agent Card extension before attachment', async () => {
+    const agent = fakeApi.agents.find((candidate) => candidate.id === 'agent-support')
+    if (agent?.agent_card) agent.agent_card.capabilities.extensions = []
+
+    const { section } = await open()
+
+    expect(section.getByRole('alert')).toHaveTextContent('Refresh the Agent Card')
+    expect(section.queryByLabelText('Add MCP server')).not.toBeInTheDocument()
   })
 })

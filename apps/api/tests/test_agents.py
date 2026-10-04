@@ -542,6 +542,43 @@ def test_patch_agent_rejects_a_base_url_without_an_agent_card() -> None:
     database_client.table.return_value.update.assert_not_called()
 
 
+def test_refresh_agent_card_discovers_new_capabilities_and_bumps_version() -> None:
+    refreshed_card = _card(
+        capabilities={
+            "streaming": False,
+            "pushNotifications": False,
+            "extensions": [{"uri": "urn:guardrail-hub:mcp-proxy:v1"}],
+        }
+    )
+    saved = {
+        **_STORED_ROW,
+        "agent_card": refreshed_card,
+        "upstream_url": "https://agent.example.com/a2a-v2",
+        "config_version": 2,
+    }
+    refreshed_card["supportedInterfaces"][0]["url"] = "https://agent.example.com/a2a-v2"
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer secret"
+        return httpx.Response(200, json=refreshed_card)
+
+    database_client = _patch_setup(_STORED_WITH_SECRET, [saved], upstream)
+
+    response = client.post(f"{AGENT_URL}/refresh-card")
+
+    assert response.status_code == 200
+    assert response.json()["agent_card"]["capabilities"]["extensions"] == [
+        {"uri": "urn:guardrail-hub:mcp-proxy:v1"}
+    ]
+    database_client.table.return_value.update.assert_called_once_with(
+        {
+            "agent_card": refreshed_card,
+            "upstream_url": "https://agent.example.com/a2a-v2",
+            "config_version": 2,
+        }
+    )
+
+
 def test_patch_agent_maps_unknown_agent_duplicate_name_and_conflict() -> None:
     _patch_setup(None)
     assert client.patch(AGENT_URL, json={"name": "x"}).status_code == 404

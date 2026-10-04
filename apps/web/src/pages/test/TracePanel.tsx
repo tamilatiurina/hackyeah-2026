@@ -1,4 +1,4 @@
-import type { Reply, TraceEntry } from '../../api/a2a'
+import type { McpTraceEntry, Reply, TraceEntry } from '../../api/a2a'
 import { badgeClass } from '../../ui/classes'
 
 const STAGES: Record<TraceEntry['stage'], string> = { input: 'Input', output: 'Output' }
@@ -11,6 +11,11 @@ const VERDICTS: Record<TraceEntry['verdict'], string> = {
   error: 'Error',
 }
 const cell = 'px-2 py-1.5 align-top'
+const MCP_STATUSES: Record<McpTraceEntry['status'], string> = {
+  allowed: 'Allowed',
+  blocked: 'Blocked',
+  error: 'Error',
+}
 
 /** FR-11: what the guardrails did for one reply, plus usage and limits. */
 export function TracePanel({ reply }: { reply: Reply | null }) {
@@ -54,6 +59,37 @@ export function TracePanel({ reply }: { reply: Reply | null }) {
               </table>
             </div>
           )}
+
+          <div className="flex flex-col gap-2">
+            <h3 className="m-0 text-sm font-semibold">MCP tools</h3>
+            {reply.mcpTrace.length === 0 ? (
+              <p className="m-0 text-sm text-muted">No verified MCP calls for this reply.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-line text-muted">
+                      {['Server', 'Tool', 'Status', 'Latency'].map((heading) => (
+                        <th key={heading} scope="col" className={`${cell} font-semibold`}>
+                          {heading}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reply.mcpTrace.map((entry, index) => (
+                      <tr key={`${entry.serverId}-${entry.toolName}-${index}`} className="border-b border-line last:border-b-0">
+                        <td className={`${cell} font-semibold`}>{entry.serverName}</td>
+                        <td className={`${cell} font-mono`}>{entry.toolName}</td>
+                        <td className={cell}>{MCP_STATUSES[entry.status]}</td>
+                        <td className={`${cell} whitespace-nowrap`}>{entry.latencyMs} ms</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {reply.usage && (
             <p className="m-0 flex flex-wrap gap-x-3 text-sm">

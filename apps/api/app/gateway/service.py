@@ -37,6 +37,7 @@ from app.gateway.pipeline import (
 )
 from app.gateway.resolver import UpstreamTarget
 from app.guardrails.judge import get_judge
+from app.mcp.capabilities import McpTraceEntry, extract_receipts, verify_receipts
 
 # The httpx client's own ceiling; the per-call time limit (B-05) is settings.CALL_TIMEOUT_SECONDS.
 UPSTREAM_TIMEOUT_SECONDS = 120.0
@@ -83,6 +84,7 @@ class GuardedReply:
     trace: list[TraceEntry] = field(default_factory=list)
     usage: limits.CallUsage | None = None  # B-05: None when the agent never answered
     limits: list[a2a.Json] = field(default_factory=list)  # B-05 meters: { name, used, max, unit }
+    mcp_trace: list[McpTraceEntry] = field(default_factory=list)
 
 
 async def post_upstream(
@@ -198,6 +200,7 @@ def _hub(
     trace: list[TraceEntry],
     usage: limits.CallUsage | None = None,
     meters: list[a2a.Json] | None = None,
+    mcp_trace: list[McpTraceEntry] | None = None,
 ) -> a2a.Json:
     """metadata.guardrailHub: the trace, the policy version, the caller's role, and (B-05) the
     call's token and cost figures and the limits it used."""
@@ -208,6 +211,8 @@ def _hub(
         hub["usage"] = usage.as_hub()
     if meters is not None:
         hub["limits"] = meters
+    if mcp_trace:
+        hub["mcpTrace"] = [entry.model_dump() for entry in mcp_trace]
     return hub
 
 
@@ -220,9 +225,14 @@ def _blocked(
     role: str | None,
     usage: limits.CallUsage | None = None,
     meters: list[a2a.Json] | None = None,
+    mcp_trace: list[McpTraceEntry] | None = None,
 ) -> a2a.Json:
     """The refusal task for a blocked call; the agent's reply, if any, is never shown."""
-    hub = {"blocked": True, "stage": stage, **_hub(policy, role, outcome.trace, usage, meters)}
+    hub = {
+        "blocked": True,
+        "stage": stage,
+        **_hub(policy, role, outcome.trace, usage, meters, mcp_trace),
+    }
     task = a2a.rejected_task(message.get("contextId"), outcome.blocked_reason or "Blocked", hub)
     return {"jsonrpc": a2a.JSONRPC_VERSION, "id": rpc_id, "result": task}
 
@@ -251,6 +261,7 @@ async def send_guarded(
     role: str | None = None,
     raw_body: bytes | None = None,
     mcp_servers: list[a2a.Json] | None = None,
+    mcp_call_id: str | None = None,
 ) -> GuardedReply:
     """Run a validated SendMessage call through the guardrails and the agent.
 
@@ -311,6 +322,12 @@ async def send_guarded(
         error_body = a2a.rpc_error(rpc_id, a2a.INTERNAL_ERROR, text, "invalid_response")
         return GuardedReply(error_body, trace=inbound.trace)
 
+    mcp_trace = (
+        verify_receipts(extract_receipts(reply), audit.agent_id, mcp_call_id)
+        if mcp_call_id is not None
+        else []
+    )
+
     usage: limits.CallUsage | None = None
     checks: list[limits.LimitCheck] = []
     if "error" not in reply:
@@ -339,10 +356,18 @@ async def send_guarded(
         refused = StageOutcome(
             trace=inbound.trace, blocked_reason=f'Blocked by limit "{blocking.reason()}"'
         )
-        refusal = _blocked(rpc_id, message, "output", refused, policy, role, usage, meters)
-        return GuardedReply(refusal, trace=inbound.trace, usage=usage, limits=meters)
+        refusal = _blocked(
+            rpc_id, message, "output", refused, policy, role, usage, meters, mcp_trace
+        )
+        return GuardedReply(
+            refusal,
+            trace=inbound.trace,
+            usage=usage,
+            limits=meters,
+            mcp_trace=mcp_trace,
+        )
 
-    if (not guarded and not over) or "error" in reply:
+    if (not guarded and not over and not mcp_servers) or "error" in reply:
         # No guardrails, or the agent's own JSON-RPC error: passed through byte for byte.
         await _record_events(audit, context_id, inbound.trace, policy)
         return GuardedReply(
@@ -353,6 +378,7 @@ async def send_guarded(
             trace=inbound.trace,
             usage=usage,
             limits=meters,
+            mcp_trace=mcp_trace,
         )
 
     # --- output guardrails ---
@@ -370,7 +396,9 @@ async def send_guarded(
     await _record_events(audit, context_id, trace, policy)
     if outbound.blocked_reason is not None:
         blocked = StageOutcome(trace=trace, blocked_reason=outbound.blocked_reason)
-        refusal = _blocked(rpc_id, message, "output", blocked, policy, role, usage, meters)
-        return GuardedReply(refusal, trace=trace, usage=usage, limits=meters)
-    a2a.add_hub_metadata(result, _hub(policy, role, trace, usage, meters))
-    return GuardedReply(reply, trace=trace, usage=usage, limits=meters)
+        refusal = _blocked(
+            rpc_id, message, "output", blocked, policy, role, usage, meters, mcp_trace
+        )
+        return GuardedReply(refusal, trace=trace, usage=usage, limits=meters, mcp_trace=mcp_trace)
+    a2a.add_hub_metadata(result, _hub(policy, role, trace, usage, meters, mcp_trace))
+    return GuardedReply(reply, trace=trace, usage=usage, limits=meters, mcp_trace=mcp_trace)

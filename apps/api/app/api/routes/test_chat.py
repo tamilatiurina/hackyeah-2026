@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,6 +39,12 @@ from app.mcp.agent_access import (
     McpGrantLoader,
     OwnerMcpGrantLoader,
     load_grants,
+)
+from app.mcp.capabilities import (
+    CapabilityUnavailableError,
+    McpTraceEntry,
+    capability_server,
+    public_proxy_url,
 )
 
 router = APIRouter(prefix="/agents", tags=["test chat"])
@@ -140,6 +146,9 @@ class GuardrailHubMetadata(BaseModel):
         description="Per-call and per-session limits this call used (B-05, FR-25/26)"
     )
     scores: list[EvaluatorScore] = Field(description="Evaluator scores (FR-28); none yet")
+    mcpTrace: list[McpTraceEntry] = Field(
+        default_factory=list, description="Cryptographically verified MCP proxy calls"
+    )
 
 
 class ReplyMetadata(_A2AModel):
@@ -210,6 +219,7 @@ def _usage(request_message: a2a.Json, reply: GuardedReply) -> Usage:
 async def send_test_chat_message(
     agent_id: UUID,
     body: ChatRequest,
+    request: Request,
     database: Annotated[AgentDatabase, Depends(get_agent_database)],
     guardrails: Annotated[GuardrailRepository, Depends(get_guardrail_repository)],
     bindings: Annotated[BindingRepository, Depends(get_binding_repository)],
@@ -232,6 +242,19 @@ async def send_test_chat_message(
     )
 
     grants = await run_in_threadpool(load_grants, mcp, str(agent_id), None)
+    mcp_call_id = str(uuid4()) if grants else None
+    try:
+        mcp_servers = [
+            capability_server(
+                grant,
+                agent_id=str(agent_id),
+                call_id=mcp_call_id or "",
+                proxy_url=public_proxy_url(str(request.base_url)),
+            )
+            for grant in grants
+        ]
+    except CapabilityUnavailableError as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
     reply = await send_guarded(
         call,
         target=target,
@@ -240,7 +263,8 @@ async def send_test_chat_message(
         client=client,
         audit=Audit(recorder=recorder, agent_id=str(agent_id)),
         role=role,
-        mcp_servers=[grant.for_agent() for grant in grants],
+        mcp_servers=mcp_servers,
+        mcp_call_id=mcp_call_id,
     )
 
     answer = reply.body

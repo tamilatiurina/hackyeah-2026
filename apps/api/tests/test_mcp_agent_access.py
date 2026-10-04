@@ -3,6 +3,7 @@
 import pytest
 from app.core.config import settings
 from app.main import app
+from app.mcp.agent_access import InMemoryAgentMcpRepository, get_agent_mcp_repository
 from fastapi.testclient import TestClient
 
 client = TestClient(app)
@@ -15,13 +16,17 @@ def access(agent_id: str = AGENT) -> str:
     return f"/api/v1/agents/{agent_id}/mcp-servers"
 
 
-def register(name: str = "Orders", tools: list[str] | None = None) -> str:
+def register(
+    name: str = "Orders",
+    tools: list[str] | None = None,
+    auth: dict[str, object] | None = None,
+) -> str:
     r = client.post(
         SERVERS,
         json={
             "name": name,
             "url": "https://mcp.acme.dev/orders",
-            "auth": {"type": "api_key", "header": "X-Key", "api_key": "sk-orders-secret"},
+            "auth": auth or {"type": "none"},
             "allowed_tools": tools or ["get_order", "list_orders", "refund"],
         },
     )
@@ -34,7 +39,7 @@ def register(name: str = "Orders", tools: list[str] | None = None) -> str:
 
 
 def test_edit_a_server_name_url_and_tools() -> None:
-    server = register()
+    server = register(auth={"type": "api_key", "header": "X-Key", "api_key": "sk-orders-secret"})
     r = client.patch(
         f"{SERVERS}/{server}",
         json={
@@ -55,7 +60,7 @@ def test_edit_a_server_name_url_and_tools() -> None:
 
 
 def test_replacing_auth_never_returns_the_secret() -> None:
-    server = register()
+    server = register(auth={"type": "api_key", "header": "X-Key", "api_key": "sk-orders-secret"})
     r = client.patch(
         f"{SERVERS}/{server}",
         json={"auth": {"type": "api_key", "header": "Authorization", "api_key": "sk-new-secret"}},
@@ -92,6 +97,7 @@ def test_attach_a_server_with_a_subset_of_its_tools() -> None:
         "server_id": server,
         "name": "Orders",
         "url": "https://mcp.acme.dev/orders",
+        "auth_type": "none",
         "available_tools": ["get_order", "list_orders", "refund"],
         "allowed_tools": ["get_order", "refund"],
     }
@@ -116,6 +122,44 @@ def test_only_the_servers_own_tools_can_be_allowed() -> None:
     dup = client.put(f"{access()}/{server}", json={"allowed_tools": ["refund", "refund"]})
     assert dup.status_code == 422
     assert client.get(access()).json() == []
+
+
+@pytest.mark.parametrize(
+    "auth",
+    [
+        {"type": "api_key", "header": "X-Key", "api_key": "secret"},
+        {
+            "type": "oauth",
+            "token_url": "https://auth.acme.dev/token",
+            "client_id": "client",
+            "client_secret": "secret",
+            "scopes": ["orders:read"],
+        },
+    ],
+)
+def test_auth_server_cannot_be_attached_until_proxy_supports_it(auth: dict[str, object]) -> None:
+    server = register(auth=auth)
+
+    response = client.put(f"{access()}/{server}", json={"allowed_tools": ["get_order"]})
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "mcp_auth_not_supported"
+
+
+def test_agent_without_the_extension_cannot_attach_a_server() -> None:
+    class IncompatibleRepository(InMemoryAgentMcpRepository):
+        def supports_mcp_proxy(self, agent_id: str) -> bool:
+            return False
+
+    server = register()
+    app.dependency_overrides[get_agent_mcp_repository] = IncompatibleRepository
+    try:
+        response = client.put(f"{access()}/{server}", json={"allowed_tools": ["get_order"]})
+    finally:
+        app.dependency_overrides.pop(get_agent_mcp_repository, None)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "agent_mcp_extension_missing"
 
 
 def test_unknown_server_or_bad_agent_id() -> None:

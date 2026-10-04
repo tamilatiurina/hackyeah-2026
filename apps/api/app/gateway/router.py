@@ -26,7 +26,7 @@ The agent's id stands in for the deployment slug until deployments exist (B-03).
 """
 
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -46,6 +46,11 @@ from app.gateway.service import (
     send_guarded,
 )
 from app.mcp.agent_access import McpGrantLoader, get_gateway_mcp_loader, load_grants
+from app.mcp.capabilities import (
+    CapabilityUnavailableError,
+    capability_server,
+    public_proxy_url,
+)
 
 __all__ = ["get_gateway_http_client", "get_guardrail_engine", "router"]
 
@@ -113,6 +118,19 @@ async def forward_to_agent(
 
     policy = await run_in_threadpool(policies.load, agent_id, key, role)
     grants = await run_in_threadpool(load_grants, mcp, agent_id, key)
+    mcp_call_id = str(uuid4()) if grants else None
+    try:
+        mcp_servers = [
+            capability_server(
+                grant,
+                agent_id=agent_id,
+                call_id=mcp_call_id or "",
+                proxy_url=public_proxy_url(str(request.base_url)),
+            )
+            for grant in grants
+        ]
+    except CapabilityUnavailableError as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
     reply = await send_guarded(
         call,
         target=target,
@@ -122,7 +140,8 @@ async def forward_to_agent(
         audit=Audit(recorder=recorder, agent_id=agent_id, key=key),
         role=role,
         raw_body=None if stripped else body,
-        mcp_servers=[grant.for_agent() for grant in grants],
+        mcp_servers=mcp_servers,
+        mcp_call_id=mcp_call_id,
     )
     if reply.raw is not None:  # the agent's answer, byte for byte
         return Response(

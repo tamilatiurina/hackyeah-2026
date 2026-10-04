@@ -120,6 +120,22 @@ describe('readReply', () => {
     expect(agentOnly.usage).toEqual({ inputTokens: 1, outputTokens: 2 })
     expect(agentOnly.trace).toEqual([])
     expect(agentOnly.limits).toEqual([])
+    expect(agentOnly.mcpTrace).toEqual([])
+  })
+
+  it('reads only the verified MCP trace published by the hub', () => {
+    const reply = readReply(
+      message('Order found.', [], {
+        mcpTrace: [
+          { serverId: 'orders', serverName: 'Orders', toolName: 'get_order', status: 'allowed', latencyMs: 12.5 },
+        ],
+      }),
+      'x',
+    )
+
+    expect(reply.mcpTrace).toEqual([
+      { serverId: 'orders', serverName: 'Orders', toolName: 'get_order', status: 'allowed', latencyMs: 12.5 },
+    ])
   })
 
   it('never shows a failed or canceled task as passed', () => {
