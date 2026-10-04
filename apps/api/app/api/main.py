@@ -17,6 +17,7 @@ from app.api.routes.agents.router import router as agents_router
 from app.api.routes.pi_policy.incident_routes import router as pi_incidents_router
 from app.api.routes.pi_policy.playground_routes import router as pi_playground_router
 from app.api.routes.pi_policy.routes import router as pi_policy_router
+from app.api.routes.pi_policy.session_routes import router as pi_sessions_router
 
 load_dotenv()
 
@@ -34,4 +35,5 @@ api_router.include_router(signatures.router)
 api_router.include_router(pi_policy_router)
 api_router.include_router(pi_playground_router)
 api_router.include_router(pi_incidents_router)
+api_router.include_router(pi_sessions_router)
 api_router.include_router(audit.router)

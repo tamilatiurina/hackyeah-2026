@@ -19,11 +19,13 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.pi_policy.state import ensure_state, pi_command, pi_env
 
 SANDBOX_DIR = "/tmp/pi-demo-sandbox"
 GLOBAL_HOST = "playground-global"  # deliberately absent from any policy "agents" map
@@ -213,18 +215,26 @@ def stage_sandbox() -> list[str]:
     return staged
 
 
-def _pi_command(repo_root: str) -> str:
-    pi = shutil.which("pi")
-    if pi is None:
-        raise PlaygroundError("The 'pi' CLI is not installed on this machine.")
-    return pi
+def _pi_command() -> list[str]:
+    resolved = pi_command()
+    if resolved is None:
+        raise PlaygroundError(
+            "The 'pi' CLI is not available. Install it (npm i @earendil-works/pi-coding-agent) "
+            "or set PI_COMMAND."
+        )
+    return resolved
 
 
 def _extension_path(repo_root: str) -> str:
-    path = os.path.join(repo_root, "packages", "pi-control-layer", "control-layer.ts")
-    if not os.path.isfile(path):
-        raise PlaygroundError("control-layer.ts not found in the repo.")
-    return path
+    """control-layer.ts: repo packages dir, or the vendored copy (Vercel build)."""
+    candidates = (
+        Path(repo_root) / "packages" / "pi-control-layer" / "control-layer.ts",
+        Path(repo_root) / "pi-control-layer" / "control-layer.ts",  # vendored by build.sh
+    )
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    raise PlaygroundError("control-layer.ts not found in the repo.")
 
 
 def run_scenario(request: RunRequest) -> RunResult:
@@ -243,14 +253,19 @@ def run_scenario(request: RunRequest) -> RunResult:
         )
         repo_root = settings.REPO_ROOT
         stage_sandbox()
+        ensure_state()  # seed policy into the (possibly serverless) state dir
 
         env = dict(os.environ)
         env["PI_DEMO_HOST"] = request.host  # hostname override consumed by control-layer.ts
+        env.update(pi_env())  # keep pi config/sessions inside the state dir on Vercel
+        # the extension resolves the policy from cwd; on serverless the state dir
+        # is not the repo, so point it explicitly
+        env["POLICY_PATH"] = settings.POLICY_PATH
         command = [
-            _pi_command(repo_root),
+            *_pi_command(),
             "-e",
             _extension_path(repo_root),
-            "--no-session",
+            # keep sessions: every playground run shows up on the Sessions page
             "--thinking",
             "off",  # demo runs: keep latency low, no deliberation needed
             "-p",

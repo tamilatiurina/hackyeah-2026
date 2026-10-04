@@ -70,9 +70,7 @@ def run(body: RunRequest) -> RunResult:
     except PlaygroundError as e:
         raise HTTPException(e.status_code, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001 — surface subprocess failures to the UI
-        raise HTTPException(
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Run failed: {e}"
-        ) from e
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Run failed: {e}") from e
 
 
 @router.post("/reset-sandbox")

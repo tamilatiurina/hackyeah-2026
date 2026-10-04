@@ -108,3 +108,51 @@ export function useUnbanLink() {
     },
   })
 }
+
+// --- sessions (pi session JSONL inventory) ---
+
+export interface SessionSummary {
+  id: string
+  timestamp: string
+  cwd: string
+  projectDir: string
+  model: string
+  messages: number
+  toolCalls: number
+  totalTokens: number
+  cacheTokens: number
+  costUsd: number | null
+  durationMs: number | null
+  title: string
+  fromPlayground: boolean
+}
+
+export interface SessionsStats {
+  sessionCount: number
+  totalCostUsd: number
+  totalTokens: number
+  totalCacheTokens: number
+  totalToolCalls: number
+  avgCostUsd: number
+  avgTokens: number
+  avgDurationMs: number
+  projects: Record<string, number>
+}
+
+export interface SessionsOverview {
+  sessions: SessionSummary[]
+  stats: SessionsStats
+}
+
+export const sessionKeys = {
+  sessions: ['pi-sessions'] as const,
+}
+
+export function usePiSessions() {
+  return useQuery({
+    queryKey: sessionKeys.sessions,
+    queryFn: () => getJson<SessionsOverview>('/pi/sessions'),
+    // new sessions appear outside the app (every pi run, every playground run)
+    staleTime: 0,
+  })
+}

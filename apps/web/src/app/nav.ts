@@ -27,6 +27,7 @@ export const AGENT_NAV_ITEMS: readonly NavItem[] = [
   { path: '/playground', label: 'Playground', title: 'Playground', issue: 'D-05' },
   { path: '/policies', label: 'Policies', title: 'Policies', issue: 'D-05' },
   { path: '/incidents', label: 'Incidents', title: 'Incidents', issue: 'D-06' },
+  { path: '/pi-sessions', label: 'Sessions', title: 'Sessions', issue: 'D-06' },
 ]
 
 export const TESTER_HOME = '/test'

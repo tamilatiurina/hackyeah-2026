@@ -93,6 +93,19 @@ def get_policy_schema(service: Service) -> dict[str, object]:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
 
 
+@router.get("/policy/defaults")
+def get_default_policy(service: Service) -> dict[str, object]:
+    """The seed policy (policy.json.example) for the Restore Defaults button.
+
+    Read via the policy service so the repo-root anchoring stays in one place;
+    validated implicitly: the UI runs it through /validate before writing.
+    """
+    try:
+        return {"policy": service.read_seed()}
+    except PolicyError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
+
+
 @router.get("/policy/backups")
 def list_backups(service: Service) -> list[dict[str, str | int | None]]:
     return service.list_backups()

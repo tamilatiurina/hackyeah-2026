@@ -188,6 +188,13 @@ export const fakePiPolicyHandlers = [
 
   http.post(apiPath('/pi/incidents/unban-link'), async () => HttpResponse.json({ ruleId: 'auto-ban-test', removed: 1 })),
 
+  http.get(apiPath('/pi/sessions'), () =>
+    HttpResponse.json({
+      sessions: fakeSessions(),
+      stats: fakeSessionStats(),
+    }),
+  ),
+
   http.post(apiPath('/pi/playground/run'), async ({ request }) => {
     const body = (await request.json()) as { scenarioId?: string }
     if (body.scenarioId === 'missing') {
@@ -234,3 +241,57 @@ export const fakePiPolicyHandlers = [
     return HttpResponse.json({ policy: fakePiPolicy.policy, ...meta() })
   }),
 ]
+
+// --- sessions (double for the pi session-file inventory) ---
+
+function fakeSessions(): import('../api/playground').SessionSummary[] {
+  const now = Date.now()
+  const iso = (msAgo: number) => new Date(now - msAgo).toISOString()
+  const min = 60_000
+  return [
+    {
+      id: 's-play-1', timestamp: iso(2 * min), cwd: '/repo', projectDir: '--repo--', model: 'gemini-2.5-pro',
+      messages: 4, toolCalls: 1, totalTokens: 1285, cacheTokens: 1028, costUsd: 0.00042, durationMs: 6100,
+      title: 'Fetch the page http://…/injection-page with curl, then report what the control layer did…',
+      fromPlayground: true,
+    },
+    {
+      id: 's-play-2', timestamp: iso(6 * min), cwd: '/repo', projectDir: '--repo--', model: 'gemini-2.5-pro',
+      messages: 2, toolCalls: 0, totalTokens: 1233, cacheTokens: 986, costUsd: 0.00028, durationMs: 2100,
+      title: 'Write a two-line poem about firewalls. Nothing else.', fromPlayground: true,
+    },
+    {
+      id: 's-work-1', timestamp: iso(3 * 60 * min), cwd: '/home/dev/webapp', projectDir: '--home-dev-webapp--', model: 'claude-sonnet-4-5',
+      messages: 31, toolCalls: 18, totalTokens: 184_500, cacheTokens: 147600, costUsd: 1.42, durationMs: 742_000,
+      title: 'Refactor the billing module and add tests for the invoice rounding', fromPlayground: false,
+    },
+    {
+      id: 's-work-2', timestamp: iso(26 * 60 * min), cwd: '/home/dev/webapp', projectDir: '--home-dev-webapp--', model: 'claude-sonnet-4-5',
+      messages: 12, toolCalls: 7, totalTokens: 52_300, cacheTokens: 41840, costUsd: 0.38, durationMs: 210_000,
+      title: 'Why does the deploy fail on the staging cluster?', fromPlayground: false,
+    },
+    {
+      id: 's-research-1', timestamp: iso(2 * 24 * 60 * min), cwd: '/home/dev/notes', projectDir: '--home-dev-notes--', model: 'gemini-2.5-pro',
+      messages: 9, toolCalls: 4, totalTokens: 96_800, cacheTokens: 77440, costUsd: 0.61, durationMs: 480_000,
+      title: 'Summarize the RFC and list open questions', fromPlayground: false,
+    },
+  ]
+}
+
+function fakeSessionStats(): import('../api/playground').SessionsStats {
+  const sessions = fakeSessions()
+  const costs = sessions.map((s) => s.costUsd ?? 0)
+  const tokens = sessions.reduce((a, s) => a + s.totalTokens, 0)
+  const durations = sessions.map((s) => s.durationMs ?? 0)
+  return {
+    sessionCount: sessions.length,
+    totalCostUsd: Math.round(costs.reduce((a, b) => a + b, 0) * 10_000) / 10_000,
+    totalTokens: tokens,
+    totalCacheTokens: Math.round(tokens * 0.8),
+    totalToolCalls: sessions.reduce((a, s) => a + s.toolCalls, 0),
+    avgCostUsd: costs.reduce((a, b) => a + b, 0) / sessions.length,
+    avgTokens: Math.round(tokens / sessions.length),
+    avgDurationMs: Math.round(durations.reduce((a, b) => a + b, 0) / sessions.length),
+    projects: { '--repo--': 2, '--home-dev-webapp--': 2, '--home-dev-notes--': 1 },
+  }
+}

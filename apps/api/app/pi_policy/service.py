@@ -91,6 +91,15 @@ class PolicyFileService:
     def read_schema(self) -> dict[str, object]:
         return self._load_json(self._schema_path)
 
+    def read_seed(self) -> dict[str, object]:
+        """The seed policy (policy.json.example next to the schema)."""
+        seed_path = self._schema_path.parent / "policy.json.example"
+        return self._load_json(seed_path)
+
+    @property
+    def seed_path(self) -> Path:
+        return self._schema_path.parent / "policy.json.example"
+
     # --- validation ---
 
     def validate(self, candidate: dict[str, object]) -> list[ValidationErrorInfo]:
@@ -255,9 +264,12 @@ def get_policy_service() -> PolicyFileService:
     """FastAPI dependency returning the process-wide policy service."""
     global _service
     if _service is None:
+        from app.pi_policy.state import ensure_state, schema_path
+
+        ensure_state()  # seed the (possibly serverless) state dir before first read
         _service = PolicyFileService(
             path=Path(settings.POLICY_PATH).resolve(),
-            schema_path=Path(settings.POLICY_SCHEMA_PATH).resolve(),
+            schema_path=Path(schema_path()).resolve(),
             max_backups=settings.POLICY_MAX_BACKUPS,
         )
     return _service

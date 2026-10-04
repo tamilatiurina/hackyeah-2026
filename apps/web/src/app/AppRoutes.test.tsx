@@ -80,7 +80,7 @@ describe('AppRoutes', () => {
     const labels = within(mainNav())
       .getAllByRole('link')
       .map((a) => a.textContent)
-    expect(labels).toEqual(['Playground', 'Policies', 'Incidents'])
+    expect(labels).toEqual(['Playground', 'Policies', 'Incidents', 'Sessions'])
   })
 
   it('agent mode redirects panel deep links to the playground', () => {
