@@ -1,7 +1,8 @@
 """A-07 write side. The gateway counts turns; B-02/B-05/B-06 report guardrail and limit hits.
 
-The test chat (B-06) records as the signed-in owner instead: OwnerAuditRecorder calls the
-owner_record_* functions, which check agents.owner_id = auth.uid() rather than a gateway key.
+The test chat (B-06) records as the signed-in user instead: OwnerAuditRecorder calls the
+owner_record_* functions, which check for a signed-in caller and an existing agent (shared
+workspace) rather than a gateway key.
 
 Supabase: the gateway has no signed-in user, so it calls security definer functions with the
 agent's gateway key hash (see the audit_and_sessions migration), like gateway_resolve_agent.

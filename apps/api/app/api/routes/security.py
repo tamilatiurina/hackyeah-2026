@@ -123,7 +123,9 @@ async def start_security_scan(
     response_model_by_alias=True,
 )
 async def list_security_scans(agent_id: UUID, database: Database) -> list[ScanListItem]:
-    await run_in_threadpool(load_upstream_target, database, agent_id)  # 404 if not the owner's
+    await run_in_threadpool(
+        load_upstream_target, database, agent_id
+    )  # 404 if the caller can't see it
     try:
         return await run_in_threadpool(
             scan_repository(database.client).list_for_agent, str(agent_id)
@@ -142,6 +144,6 @@ async def get_security_scan(scan_id: UUID, database: Database) -> ScanRecord:
         ) from error
     if scan is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Scan not found")
-    # Supabase RLS already hides other owners' scans; this also covers the in-memory store.
+    # Supabase RLS already hides scans of agents the caller can't see; this covers memory too.
     await run_in_threadpool(load_upstream_target, database, UUID(scan.agent_id))
     return scan

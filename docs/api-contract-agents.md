@@ -33,11 +33,13 @@ interface AgentUpdate {              // PATCH body; every field optional
 | Call | Success | Errors |
 |---|---|---|
 | `GET /agents/{id}` | 200 `Agent` (includes `config_version`) | 404 "Agent not found"; 422 malformed id |
-| `PATCH /agents/{id}` | 200 `Agent`; `config_version` + 1 only when something actually changed | 404 (also for another owner's agent); 409 when the agent was edited meanwhile (the write is guarded on the version read); 409 "An agent with this name already exists"; 422 validation; 502 when a changed `base_url` has no readable A2A 1.0 Agent Card (the detail says why) |
+| `PATCH /agents/{id}` | 200 `Agent`; `config_version` + 1 only when something actually changed | 404; 409 when the agent was edited meanwhile (the write is guarded on the version read); 409 "An agent with this name already exists"; 422 validation; 502 when a changed `base_url` has no readable A2A 1.0 Agent Card (the detail says why) |
 | `DELETE /agents/{id}` (also removes the agent's bindings) | 204 | 404 |
 
-Only the owner can edit or delete an agent (row level security); anyone else gets 404. Admin override of other
-people's agents is not built yet. The version is a counter only; there is no history table (FR-09 would need one).
+One shared workspace: every signed-in user can see, edit and delete every agent, and an agent's
+sessions, audit events, security scans and MCP access follow its visibility (row level security,
+`20261004180000_shared_agent_workspace.sql`). Creating an agent still records its owner. The panel
+signs visitors in as anonymous guests, so anyone with the panel's URL can do this. The version is a counter only; there is no history table (FR-09 would need one).
 
 ## B-06: test chat — proposed
 
@@ -103,7 +105,7 @@ The web app treats a 404/405 from these endpoints as "not implemented yet". The 
 ## A-07: audit log and sessions (FR-28, FR-36) — implemented
 
 All need the signed-in user's Bearer token (401 without one when Supabase is configured). Rows are
-limited by RLS to the caller's own agents. Errors: 401, 422 (bad filter value or cursor), 503
+limited by RLS to the agents the caller can see (all of them in the shared workspace). Errors: 401, 422 (bad filter value or cursor), 503
 (storage unavailable). Paging is opaque: pass `next_cursor` back as `before`.
 
 ### `GET /api/v1/audit-events`
@@ -194,7 +196,7 @@ Signed-in Bearer token required (401 without one when Supabase is configured).
   the caller doesn't own.
 - `DELETE /api/v1/agents/{agent_id}/mcp-servers/{server_id}` → 204; 404 if the agent had no access.
 
-Only an agent's owner sees or changes its MCP access (RLS). On every call the gateway and the test
+Whoever can see an agent sees and changes its MCP access (RLS). On every call the gateway and the test
 chat send the agent its servers and tools in `params.metadata.guardrailHub.mcpServers` (see
 `docs/agent-contract-a2a.md`); credentials never leave the hub.
 
