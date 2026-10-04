@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import { usePiSessions } from '../../api/playground'
 import { buttonSecondary } from '../../ui/classes'
-import { ProjectChips, SessionCard, StatsBand } from '../sessions/sessionCards'
+import { ProjectChips, SessionCard, StatsBand } from './sessionCards'
 
 export function PiSessionsPage() {
   const query = usePiSessions()
