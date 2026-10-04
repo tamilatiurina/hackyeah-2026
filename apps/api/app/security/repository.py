@@ -1,4 +1,4 @@
-"""Where scans are saved: Supabase as the signed-in owner when configured, otherwise in memory."""
+"""Where scans are saved: Supabase as the signed-in user when configured, otherwise in memory."""
 
 from typing import Any, Protocol, cast
 
@@ -34,7 +34,7 @@ def _row(scan: ScanRecord) -> dict[str, Any]:
 
 
 class SupabaseScanRepository:
-    """The owner's own client: RLS limits every read and write to their agents."""
+    """The signed-in user's client: RLS limits reads and writes to agents they can see."""
 
     def __init__(self, client: Client) -> None:
         self._client = client

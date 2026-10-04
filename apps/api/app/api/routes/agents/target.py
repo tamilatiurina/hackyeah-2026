@@ -12,7 +12,7 @@ from app.gateway.resolver import UpstreamTarget
 
 
 def load_upstream_target(database: AgentDatabase, agent_id: UUID) -> UpstreamTarget:
-    """The agent's upstream settings, read as the signed-in owner (RLS: someone else's agent
+    """The agent's upstream settings, read as the signed-in user (RLS: an agent they can't see
     is a 404, like a missing one). Blocking."""
     try:
         response = (
