@@ -95,6 +95,7 @@ export function fakeAgentCard(name: string, baseUrl: string): AgentCard {
     description: `${name} (from its Agent Card).`,
     version: '1.0.0',
     supportedInterfaces: [{ url: `${baseUrl.replace(/\/$/, '')}/a2a`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }],
+    capabilities: { extensions: [{ uri: 'urn:guardrail-hub:mcp-proxy:v1' }] },
     skills: [{ id: 'orders', name: 'Orders and returns', description: 'Order status.', tags: ['support'] }],
   }
 }
@@ -169,7 +170,7 @@ function agentMcpEntries(agentId: string): AgentMcpServer[] {
   return fakeApi.mcpAccess.flatMap((a) => {
     const server = fakeApi.mcpServers.find((s) => s.id === a.server_id)
     return a.agent_id === agentId && server
-      ? [{ server_id: server.id, name: server.name, url: server.url, available_tools: server.allowed_tools, allowed_tools: a.allowed_tools }]
+      ? [{ server_id: server.id, name: server.name, url: server.url, auth_type: server.auth.type, available_tools: server.allowed_tools, allowed_tools: a.allowed_tools }]
       : []
   })
 }
@@ -450,6 +451,12 @@ export const fakeApiHandlers = [
   http.get(apiPath('/agents/:id'), ({ request, params }) => {
     if (!signedIn(request)) return notAuthenticated()
     const agent = fakeApi.agents.find((a) => a.id === params.id)
+    return agent ? HttpResponse.json(agent) : detail(404, 'Agent not found')
+  }),
+
+  http.post(apiPath('/agents/:id/refresh-card'), ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    const agent = fakeApi.agents.find((candidate) => candidate.id === params.id)
     return agent ? HttpResponse.json(agent) : detail(404, 'Agent not found')
   }),
 

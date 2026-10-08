@@ -19,6 +19,14 @@ Access = Annotated[AgentMcpRepository, Depends(get_agent_mcp_repository)]
 Servers = Annotated[McpServerRepository, Depends(get_mcp_server_repository)]
 
 _AGENT_NOT_FOUND = "Agent not found"
+_AUTH_NOT_SUPPORTED = {
+    "code": "mcp_auth_not_supported",
+    "message": "Only MCP servers without authentication are supported by the MCP proxy",
+}
+_AGENT_NOT_COMPATIBLE = {
+    "code": "agent_mcp_extension_missing",
+    "message": "The agent does not declare urn:guardrail-hub:mcp-proxy:v1 in its Agent Card",
+}
 
 
 @router.get("/{agent_id}/mcp-servers")
@@ -37,6 +45,14 @@ def set_agent_mcp_server(
     server = servers.get(server_id)
     if server is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "MCP server not found")
+    if server.auth.type != "none":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _AUTH_NOT_SUPPORTED)
+    try:
+        compatible = access.supports_mcp_proxy(str(agent_id))
+    except AgentNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _AGENT_NOT_FOUND) from error
+    if not compatible:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _AGENT_NOT_COMPATIBLE)
     unknown = [tool for tool in body.allowed_tools if tool not in server.allowed_tools]
     if unknown:
         raise HTTPException(

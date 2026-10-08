@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -9,6 +10,8 @@ from app.audit.memory import reset_in_memory_audit  # noqa: E402  (needs the pat
 from app.core.config import settings  # noqa: E402  (needs the path above)
 from app.mcp.repository import reset_in_memory_servers  # noqa: E402  (needs the path above)
 from app.store import reset_store  # noqa: E402  (needs the path above)
+
+TEST_MCP_CAPABILITY_KEY = Fernet.generate_key().decode()
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +27,7 @@ def no_real_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
     # Without these settings, guardrails and MCP servers use memory. Tests that need them set them.
     monkeypatch.setattr(settings, "SUPABASE_URL", "")
     monkeypatch.setattr(settings, "SUPABASE_KEY", "")
+    monkeypatch.setattr(settings, "MCP_CAPABILITY_KEY", TEST_MCP_CAPABILITY_KEY)
 
 
 @pytest.fixture(autouse=True)

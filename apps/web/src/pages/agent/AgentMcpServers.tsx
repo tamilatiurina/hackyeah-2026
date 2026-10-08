@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { useAgentMcpServers, useRemoveAgentMcpServer, useSetAgentMcpServer } from '../../api/agentMcpServers'
 import { useMcpServers } from '../../api/mcpServers'
+import { supportsMcpProxy } from '../../api/mcpProxy'
 import type { Agent, AgentMcpServer } from '../../api/types'
 import { buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
 
@@ -17,9 +18,11 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
   const [adding, setAdding] = useState('')
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const compatible = supportsMcpProxy(agent)
 
   const attached = new Set(access.data?.map((e) => e.server_id))
-  const available = servers.data?.filter((s) => !attached.has(s.id)) ?? []
+  const available = servers.data?.filter((s) => s.auth.type === 'none' && !attached.has(s.id)) ?? []
+  const unsupported = servers.data?.filter((s) => s.auth.type !== 'none' && !attached.has(s.id)) ?? []
   const toAdd = available.some((s) => s.id === adding) ? adding : (available[0]?.id ?? '')
 
   const add = () => {
@@ -105,6 +108,13 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
         </p>
       )}
 
+      {!compatible && (
+        <p role="alert" className="m-0 text-sm text-danger">
+          Refresh the Agent Card after deploying MCP proxy support. Servers cannot be attached until the agent
+          declares the Guardrail Hub extension.
+        </p>
+      )}
+
       {content}
 
       {servers.isSuccess && servers.data.length === 0 ? (
@@ -115,7 +125,7 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
           </Link>
         </p>
       ) : (
-        available.length > 0 && (
+        compatible && available.length > 0 && (
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex min-w-56 flex-col gap-1.5">
               <label htmlFor="agent-mcp-add" className="text-[13px] font-semibold text-[#30343B]">
@@ -140,6 +150,12 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
           </div>
         )
       )}
+      {unsupported.length > 0 && (
+        <p className="m-0 text-sm text-muted">
+          {unsupported.map((server) => server.name).join(', ')} cannot be attached because authenticated MCP
+          backends are not supported by this runtime.
+        </p>
+      )}
     </section>
   )
 }
@@ -159,6 +175,7 @@ function ServerAccess({ entry, busy, onSave, onRemove }: ServerAccessProps) {
   const selection = entry.available_tools.filter((t) => chosen.has(t))
   const dirty = selection.join(',') !== entry.allowed_tools.join(',')
   const legendId = `agent-mcp-${entry.server_id}`
+  const unsupported = entry.auth_type !== 'none'
 
   const toggle = (tool: string) => {
     setError(null)
@@ -174,12 +191,13 @@ function ServerAccess({ entry, busy, onSave, onRemove }: ServerAccessProps) {
     <fieldset aria-labelledby={legendId} className="m-0 flex flex-col gap-3 rounded-lg border border-line p-4">
       <div id={legendId} className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="font-semibold">{entry.name}</span>
+        {unsupported && <span className="text-xs font-semibold text-danger">Unsupported authentication</span>}
         <span className="font-mono text-xs break-all text-muted">{entry.url}</span>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
         {entry.available_tools.map((tool) => (
           <label key={tool} className="flex min-h-9 items-center gap-2 font-mono text-[13px]">
-            <input type="checkbox" checked={chosen.has(tool)} onChange={() => toggle(tool)} />
+            <input type="checkbox" checked={chosen.has(tool)} disabled={unsupported} onChange={() => toggle(tool)} />
             {tool}
           </label>
         ))}
@@ -198,7 +216,7 @@ function ServerAccess({ entry, busy, onSave, onRemove }: ServerAccessProps) {
             type="button"
             aria-label={`Save tools for ${entry.name}`}
             className={`${buttonPrimary} min-h-9 px-3 text-xs`}
-            disabled={busy || selection.length === 0}
+            disabled={busy || unsupported || selection.length === 0}
             onClick={() => onSave(selection, setError)}
           >
             Save

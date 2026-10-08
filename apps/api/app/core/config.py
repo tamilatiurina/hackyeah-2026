@@ -53,6 +53,15 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
 
+    # Short-lived, encrypted capabilities used by the MCP proxy. This must be one shared
+    # Fernet key on every API instance (generate with Fernet.generate_key()).
+    MCP_CAPABILITY_KEY: str = ""
+    PUBLIC_API_URL: str = ""
+    MCP_CONNECT_TIMEOUT_SECONDS: float = 3.0
+    MCP_TOOL_TIMEOUT_SECONDS: float = 10.0
+    MCP_MAX_TOOLS: int = 50
+    MCP_MAX_RESULT_BYTES: int = 65_536
+
     # LLM judge engine (E-02). Without a key, llm_judge verdicts are simulated heuristics.
     ANTHROPIC_API_KEY: str = ""
     JUDGE_MODEL: str = "claude-haiku-4-5"

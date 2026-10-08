@@ -1,0 +1,15 @@
+[project]
+name = "acme-demo-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=1.11.0",
+    "fastapi>=0.121.0",
+    "httpx2>=2.13.1",
+    "mcp>=2,<3",
+    "pydantic>=2.7",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[tool.uv]
+package = false

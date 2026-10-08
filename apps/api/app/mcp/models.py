@@ -131,6 +131,7 @@ class AgentMcpServer(BaseModel):
     url: str
     available_tools: list[str]  # everything the server offers
     allowed_tools: list[str]  # what this agent may call
+    auth_type: Literal["none", "api_key", "oauth"]
 
 
 class McpGrant(BaseModel):
@@ -141,6 +142,7 @@ class McpGrant(BaseModel):
     name: str
     url: str
     allowed_tools: list[str] = Field(alias="allowedTools")
+    auth_type: Literal["none", "api_key", "oauth"] = Field(alias="authType")
 
     model_config = {"populate_by_name": True}
 

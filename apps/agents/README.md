@@ -15,6 +15,8 @@ POST /a2a                           -> JSON-RPC 2.0, method SendMessage, header 
 
 The reply is `{"result": {"message": {"role": "ROLE_AGENT", "parts": [{"text": "..."}], ...}}}`; with a real model it carries `metadata.usage = {inputTokens, outputTokens}` so the hub can count tokens. Text parts the hub tags with `metadata.guardrailHub` (governance prompt, context) are appended to the system prompt. Other A2A methods (streaming, tasks) answer `-32004`.
 
+The Agent Card advertises `urn:guardrail-hub:mcp-proxy:v1`. For each A2A call, the agent reads the Hub's short-lived MCP proxy descriptors, discovers only the granted tools, and gives their schemas to Claude. Tool names include a server alias to prevent collisions. The tool-use loop is limited to four model rounds and eight tool calls. Proxy receipts are echoed in `metadata.guardrailHub.mcpReceipts`; the Hub verifies and removes them before returning a safe trace to the caller.
+
 ## Environment variables
 
 | Variable | Default | Purpose |
@@ -27,13 +29,16 @@ The reply is `{"result": {"message": {"role": "ROLE_AGENT", "parts": [{"text": "
 | `SYSTEM_PROMPT` | built-in support prompt | Replace to make a different agent |
 | `MODEL` | `claude-haiku-4-5-20251001` | Any Messages API model |
 | `AGENT_API_KEY` | none | If set, callers must send `Authorization: Bearer <key>` |
+| `MCP_MAX_ROUNDS` | `4` | Maximum Claude tool-use rounds per message |
+| `MCP_MAX_CALLS` | `8` | Maximum MCP calls per message |
+| `MCP_TIMEOUT_SECONDS` | `12` | Agent-side timeout for proxy discovery and calls |
 
 ## Quick start
 
 ```bash
-pip install -r requirements.txt
+uv sync --all-packages
 export ANTHROPIC_API_KEY=sk-ant-...      # or: export MOCK=1
-uvicorn app:app --port 8080
+uv run --project apps/agents uvicorn app:app --port 8080
 ```
 
 Test it:
@@ -62,13 +67,13 @@ Start the agent you want by passing its file with `--env-file`:
 
 ```bash
 # IT support
-uvicorn app:app --port 8080 --env-file agents_config/it_support.env
+uv run --project apps/agents uvicorn app:app --port 8080 --env-file agents_config/it_support.env
 
 # Finance assistant
-uvicorn app:app --port 8080 --env-file agents_config/finance_assistant.env
+uv run --project apps/agents uvicorn app:app --port 8080 --env-file agents_config/finance_assistant.env
 
 # Sales deal desk
-uvicorn app:app --port 8080 --env-file agents_config/sales_deal_desk.env
+uv run --project apps/agents uvicorn app:app --port 8080 --env-file agents_config/sales_deal_desk.env
 ```
 
 Check which agent is running:
@@ -80,7 +85,7 @@ curl -s localhost:8080/.well-known/agent-card.json
 
 Notes:
 
-- `--env-file` needs `python-dotenv` (included with `uvicorn[standard]`). If you get an error, run `pip install python-dotenv`.
+- `--env-file` needs `python-dotenv`, included with `uvicorn[standard]` in this workspace.
 - Keep `ANTHROPIC_API_KEY` out of the config files so you never commit it. Export it in your shell as shown above.
 - To run several agents at the same time, give each its own port: `--port 8081`, `--port 8082`, and so on.
 

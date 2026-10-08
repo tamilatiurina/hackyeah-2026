@@ -1,10 +1,16 @@
+import { useRefreshAgentCard } from '../../api/agents'
+import { supportsMcpProxy } from '../../api/mcpProxy'
 import type { Agent } from '../../api/types'
+import { buttonSecondary } from '../../ui/classes'
 import { cardSummary } from '../agents/agentDisplay'
 
 const term = 'text-xs font-semibold tracking-[0.04em] text-muted uppercase'
 const value = 'm-0 text-sm'
 
 export function AgentOverview({ agent }: { agent: Agent }) {
+  const refresh = useRefreshAgentCard(agent.id)
+  const mcpCompatible = supportsMcpProxy(agent)
+
   return (
     <section aria-label="Overview" className="rounded-xl border border-line bg-surface p-5 sm:p-6">
       <dl className="m-0 grid gap-x-8 gap-y-4 sm:grid-cols-[12rem_1fr]">
@@ -15,14 +21,30 @@ export function AgentOverview({ agent }: { agent: Agent }) {
         <dt className={term}>A2A endpoint</dt>
         <dd className={`${value} min-w-0 overflow-x-auto font-mono text-[13px] whitespace-nowrap`}>{agent.upstream_url}</dd>
         <dt className={term}>Agent Card</dt>
-        <dd className={value}>
-          {agent.agent_card ? (
-            cardSummary(agent.agent_card)
-          ) : (
-            <span className="text-danger">
-              No Agent Card. This agent was registered before A2A; delete it and register it again.
-            </span>
-          )}
+        <dd className={`${value} flex flex-wrap items-center gap-2`}>
+          <span>
+            {agent.agent_card ? (
+              cardSummary(agent.agent_card)
+            ) : (
+              <span className="text-danger">
+                No Agent Card snapshot. This agent was registered before A2A; refresh the card after redeploying it.
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            className={`${buttonSecondary} min-h-8 px-2.5 text-xs`}
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate()}
+          >
+            {refresh.isPending ? 'Refreshing…' : 'Refresh card'}
+          </button>
+          {refresh.isSuccess && <span role="status" className="text-teal-dark">Card refreshed.</span>}
+          {refresh.isError && <span role="alert" className="text-danger">{refresh.error.message}</span>}
+        </dd>
+        <dt className={term}>MCP proxy</dt>
+        <dd className={`${value} ${mcpCompatible ? 'text-teal-dark' : 'text-danger'}`}>
+          {mcpCompatible ? 'Compatible' : 'Extension not declared'}
         </dd>
         {agent.agent_card && agent.agent_card.skills.length > 0 && (
           <>

@@ -25,6 +25,7 @@ from app.gateway.resolver import UpstreamTarget, get_agent_resolver
 from app.guardrails.models import Guardrail
 from app.main import app
 from app.mcp.agent_access import InMemoryAgentMcpRepository
+from app.mcp.capabilities import read_capability
 from app.mcp.models import McpServerCreate
 from app.mcp.repository import InMemoryMcpServerRepository
 from app.store import store
@@ -427,11 +428,12 @@ def test_the_test_chat_tells_the_agent_its_mcp_servers(agent: Agent) -> None:
     InMemoryAgentMcpRepository().put(AGENT_ID, server, ["search_docs"])
     chat("hello")
     hub = agent.bodies[0]["params"]["metadata"]["guardrailHub"]
-    assert hub["mcpServers"] == [
-        {
-            "id": "mcp-docs",
-            "name": "Docs",
-            "url": "https://mcp.acme.dev/docs",
-            "allowedTools": ["search_docs"],
-        }
-    ]
+    [descriptor] = hub["mcpServers"]
+    assert descriptor["id"] == "mcp-docs"
+    assert descriptor["name"] == "Docs"
+    assert descriptor["url"] == "http://testserver/mcp-proxy/"
+    assert descriptor["transport"] == "streamable-http"
+    assert descriptor["allowedTools"] == ["search_docs"]
+    capability = read_capability(descriptor["capabilityToken"])
+    assert capability.backend_url == "https://mcp.acme.dev/docs"
+    assert "mcp.acme.dev" not in json.dumps(agent.bodies[0])

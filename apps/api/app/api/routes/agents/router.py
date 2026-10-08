@@ -328,6 +328,78 @@ async def update_agent(
     return _public_agent(result.data[0])
 
 
+@router.post("/{agent_id}/refresh-card", response_model=Agent)
+async def refresh_agent_card(
+    agent_id: UUID,
+    client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
+    database: Annotated[AgentDatabase, Depends(get_agent_database)],
+) -> Agent:
+    """Refetch the deployed Agent Card so newly advertised capabilities take effect."""
+    try:
+        response = await run_in_threadpool(
+            lambda: (
+                database.client.table("agents")
+                .select(_SECRET_AGENT_COLUMNS)
+                .eq("id", str(agent_id))
+                .limit(1)
+                .execute()
+            )
+        )
+    except (APIError, httpx.HTTPError) as error:
+        raise _database_error() from error
+    if not response.data:
+        raise _agent_not_found()
+
+    current: dict[str, JSON] = response.data[0]
+    header_name = current.get("auth_header_name")
+    header_value = current.get("auth_header_value")
+    headers = (
+        {str(header_name): str(header_value)}
+        if header_name is not None and header_value is not None
+        else None
+    )
+    card, snapshot = await fetch_agent_card(client, HttpUrl(str(current["base_url"])), headers)
+    interface = card.jsonrpc_interface()
+    assert interface is not None
+
+    changes: dict[str, JSON] = {
+        key: value
+        for key, value in {
+            "agent_card": snapshot,
+            "upstream_url": str(interface.url),
+        }.items()
+        if current.get(key) != value
+    }
+    if not changes:
+        return _public_agent(current)
+
+    version = current["config_version"]
+    assert isinstance(version, int)
+    changes["config_version"] = version + 1
+    try:
+        result = await run_in_threadpool(
+            lambda: (
+                database.client.table("agents")
+                .update(changes)
+                .eq("id", str(agent_id))
+                .eq("config_version", version)
+                .execute()
+            )
+        )
+    except APIError as error:
+        raise _agent_insert_error(error) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not save agent"
+        ) from error
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The agent was changed by someone else; reload and try again",
+        )
+    return _public_agent(result.data[0])
+
+
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
     agent_id: UUID,

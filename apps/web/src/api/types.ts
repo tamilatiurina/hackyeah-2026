@@ -14,6 +14,11 @@ export interface AgentCard {
   description: string
   version: string
   supportedInterfaces: { url: string; protocolBinding: string; protocolVersion: string }[]
+  capabilities: {
+    streaming?: boolean
+    pushNotifications?: boolean
+    extensions?: { uri: string; [key: string]: unknown }[]
+  }
   skills: AgentSkill[]
 }
 
@@ -192,6 +197,7 @@ export interface AgentMcpServer {
   server_id: string
   name: string
   url: string
+  auth_type: McpAuthType
   /** Everything the server offers. */
   available_tools: string[]
   /** What this agent may call. */

@@ -43,6 +43,17 @@ export function useUpdateAgent(id: string) {
   })
 }
 
+export function useRefreshAgentCard(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => postJson<Agent>(`/agents/${enc(id)}/refresh-card`, {}),
+    onSuccess: (agent) => {
+      queryClient.setQueryData(agentKeys.agent(id), agent)
+      queryClient.setQueryData<Agent[]>(agentKeys.agents, (old) => old?.map((a) => (a.id === agent.id ? agent : a)))
+    },
+  })
+}
+
 export function useDeleteAgent() {
   const queryClient = useQueryClient()
   return useMutation({

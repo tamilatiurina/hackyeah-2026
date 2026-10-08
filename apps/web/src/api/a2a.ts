@@ -17,6 +17,14 @@ export interface TraceEntry {
   simulated?: boolean
 }
 
+export interface McpTraceEntry {
+  serverId: string
+  serverName: string
+  toolName: string
+  status: 'allowed' | 'blocked' | 'error'
+  latencyMs: number
+}
+
 export interface GuardrailHubMetadata {
   blocked?: boolean
   stage?: 'input' | 'output'
@@ -24,6 +32,7 @@ export interface GuardrailHubMetadata {
   role?: string
   userId?: string
   trace?: TraceEntry[]
+  mcpTrace?: McpTraceEntry[]
   usage?: { inputTokens: number; outputTokens: number; costUsd?: number }
   limits?: { name: string; used: number; max: number; unit?: string }[]
   scores?: { name: string; score: number }[]
@@ -81,6 +90,7 @@ export interface Reply {
   text: string
   verdict: Verdict
   trace: TraceEntry[]
+  mcpTrace: McpTraceEntry[]
   usage?: GuardrailHubMetadata['usage']
   limits: NonNullable<GuardrailHubMetadata['limits']>
   scores: NonNullable<GuardrailHubMetadata['scores']>
@@ -109,7 +119,7 @@ function partText(part: A2APart): string {
 const joinParts = (parts: A2APart[]) => parts.map(partText).join('\n')
 
 function errorReply(messageId: string, errorMessage: string): Reply {
-  return { messageId, text: '', verdict: 'error', trace: [], limits: [], scores: [], errorMessage }
+  return { messageId, text: '', verdict: 'error', trace: [], mcpTrace: [], limits: [], scores: [], errorMessage }
 }
 
 function fromHub(messageId: string, text: string, metadata: A2AMetadata | undefined): Reply {
@@ -123,6 +133,7 @@ function fromHub(messageId: string, text: string, metadata: A2AMetadata | undefi
     text,
     verdict,
     trace,
+    mcpTrace: hub.mcpTrace ?? [],
     usage: hub.usage ?? metadata?.usage,
     limits: hub.limits ?? [],
     scores: hub.scores ?? [],

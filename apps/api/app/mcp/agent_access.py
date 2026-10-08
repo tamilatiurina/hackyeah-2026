@@ -14,6 +14,7 @@ from typing import Annotated, Any, Protocol, TypeVar
 import httpx
 from app.core.supabase import get_supabase, get_supabase_for_user
 from app.gateway.keys import hash_key
+from app.mcp.capabilities import MCP_EXTENSION_URI
 from app.mcp.models import AgentMcpServer, McpGrant, McpServer
 from app.mcp.repository import ACCESS, InMemoryMcpServerRepository, supabase_configured
 from fastapi import Depends, HTTPException, status
@@ -47,6 +48,10 @@ class AgentMcpRepository(Protocol):
         """Server id -> how many of the caller's agents may use it."""
         ...
 
+    def supports_mcp_proxy(self, agent_id: str) -> bool:
+        """Whether the agent's saved Agent Card declares the Hub MCP extension."""
+        ...
+
 
 def _entry(server: McpServer, allowed: Tools) -> AgentMcpServer:
     return AgentMcpServer(
@@ -55,6 +60,7 @@ def _entry(server: McpServer, allowed: Tools) -> AgentMcpServer:
         url=str(server.url),
         available_tools=list(server.allowed_tools),
         allowed_tools=list(allowed),
+        auth_type=server.auth.type,
     )
 
 
@@ -76,6 +82,10 @@ class InMemoryAgentMcpRepository:
 
     def counts(self) -> dict[str, int]:
         return dict(Counter(server_id for _, server_id in ACCESS))
+
+    def supports_mcp_proxy(self, agent_id: str) -> bool:
+        del agent_id
+        return True  # Local mode has no agent table; tests exercise the contract separately.
 
 
 class SupabaseAgentMcpRepository:
@@ -105,7 +115,7 @@ class SupabaseAgentMcpRepository:
         response = self._run(
             lambda: (
                 self._client.table(TABLE)
-                .select("server_id,allowed_tools,mcp_servers(id,name,url,allowed_tools)")
+                .select("server_id,allowed_tools,mcp_servers(id,name,url,auth_type,allowed_tools)")
                 .eq("agent_id", agent_id)
                 .order("created_at")
                 .execute()
@@ -123,6 +133,7 @@ class SupabaseAgentMcpRepository:
                     url=server["url"],
                     available_tools=server["allowed_tools"],
                     allowed_tools=row["allowed_tools"],
+                    auth_type=server["auth_type"],
                 )
             )
         return entries
@@ -151,6 +162,26 @@ class SupabaseAgentMcpRepository:
     def counts(self) -> dict[str, int]:
         response = self._run(lambda: self._client.table(TABLE).select("server_id").execute())
         return dict(Counter(row["server_id"] for row in response.data))
+
+    def supports_mcp_proxy(self, agent_id: str) -> bool:
+        response = self._run(
+            lambda: (
+                self._client.table("agents")
+                .select("agent_card")
+                .eq("id", agent_id)
+                .limit(1)
+                .execute()
+            )
+        )
+        if not response.data:
+            raise AgentNotFoundError
+        card = response.data[0].get("agent_card")
+        capabilities = card.get("capabilities") if isinstance(card, dict) else None
+        extensions = capabilities.get("extensions") if isinstance(capabilities, dict) else None
+        return any(
+            isinstance(extension, dict) and extension.get("uri") == MCP_EXTENSION_URI
+            for extension in extensions or []
+        )
 
 
 def get_agent_mcp_repository(
@@ -192,8 +223,15 @@ class InMemoryMcpGrantLoader:
     def load(self, agent_id: str, key: str | None) -> list[McpGrant]:
         del key  # the caller is already authenticated
         return [
-            McpGrant(id=e.server_id, name=e.name, url=e.url, allowed_tools=e.allowed_tools)
+            McpGrant(
+                id=e.server_id,
+                name=e.name,
+                url=e.url,
+                allowed_tools=e.allowed_tools,
+                auth_type=e.auth_type,
+            )
             for e in InMemoryAgentMcpRepository().list(agent_id)
+            if e.auth_type == "none"
         ]
 
 
@@ -236,7 +274,7 @@ def get_gateway_mcp_loader() -> McpGrantLoader:
 def load_grants(loader: McpGrantLoader, agent_id: str, key: str | None) -> list[McpGrant]:
     """Never fails the call: if access can't be read, the agent gets no MCP servers."""
     try:
-        return loader.load(agent_id, key)
+        return [grant for grant in loader.load(agent_id, key) if grant.auth_type == "none"]
     except Exception:  # noqa: BLE001 - least privilege beats a failed call
         logger.warning("Could not load MCP access for agent %s", agent_id, exc_info=True)
         return []
