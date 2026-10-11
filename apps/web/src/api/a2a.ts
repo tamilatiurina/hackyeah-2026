@@ -17,7 +17,7 @@ export interface TraceEntry {
   simulated?: boolean
 }
 
-export interface AgentEnforcerMetadata {
+export interface AgentsOnRailsMetadata {
   blocked?: boolean
   stage?: 'input' | 'output'
   policyVersion?: string
@@ -30,7 +30,7 @@ export interface AgentEnforcerMetadata {
 }
 
 export interface A2AMetadata {
-  agentEnforcer?: AgentEnforcerMetadata
+  agentsOnRails?: AgentsOnRailsMetadata
   usage?: { inputTokens: number; outputTokens: number }
   [key: string]: unknown
 }
@@ -81,9 +81,9 @@ export interface Reply {
   text: string
   verdict: Verdict
   trace: TraceEntry[]
-  usage?: AgentEnforcerMetadata['usage']
-  limits: NonNullable<AgentEnforcerMetadata['limits']>
-  scores: NonNullable<AgentEnforcerMetadata['scores']>
+  usage?: AgentsOnRailsMetadata['usage']
+  limits: NonNullable<AgentsOnRailsMetadata['limits']>
+  scores: NonNullable<AgentsOnRailsMetadata['scores']>
   errorMessage?: string
 }
 
@@ -111,7 +111,7 @@ function errorReply(messageId: string, errorMessage: string): Reply {
 }
 
 function fromHub(messageId: string, text: string, metadata: A2AMetadata | undefined): Reply {
-  const hub = metadata?.agentEnforcer ?? {}
+  const hub = metadata?.agentsOnRails ?? {}
   const trace = hub.trace ?? []
   const has = (v: TraceEntry['verdict']) => trace.some((t) => t.verdict === v)
   const verdict: Verdict =

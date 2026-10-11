@@ -438,7 +438,7 @@ def test_an_input_block_never_reaches_the_upstream_agent(gateway: Recorder) -> N
     assert task["status"]["message"]["parts"] == [
         {"text": 'Blocked by guardrail "Injection": injection matched'}
     ]
-    hub = task["metadata"]["agentEnforcer"]
+    hub = task["metadata"]["agentsOnRails"]
     assert hub["blocked"] is True
     assert hub["stage"] == "input"
     assert [(e["guardrailId"], e["verdict"]) for e in hub["trace"]] == [("injection", "block")]
@@ -452,7 +452,7 @@ def test_input_redaction_is_what_the_agent_receives(gateway: Recorder) -> None:
     sent = gateway.bodies[0]["params"]["message"]["parts"]
     assert sent == [{"text": "I am [EMAIL]"}]
     assert message["parts"] == [{"text": "Echo: I am [EMAIL]"}]  # the agent only saw the redaction
-    trace = message["metadata"]["agentEnforcer"]["trace"]
+    trace = message["metadata"]["agentsOnRails"]["trace"]
     assert [(e["stage"], e["verdict"]) for e in trace] == [("input", "redact"), ("output", "pass")]
     assert message["metadata"]["usage"]  # the agent's own metadata is kept
 
@@ -463,7 +463,7 @@ def test_an_output_block_replaces_the_agents_answer() -> None:
     task = say("#pii")["result"]["task"]
 
     assert task["status"]["state"] == "TASK_STATE_REJECTED"
-    assert task["metadata"]["agentEnforcer"]["stage"] == "output"
+    assert task["metadata"]["agentsOnRails"]["stage"] == "output"
     assert "jan.kowalski" not in json.dumps(task)  # nothing of the agent's reply leaks
 
 
@@ -483,7 +483,7 @@ def test_response_relevance_blocks_unrelated_gateway_reply() -> None:
     task = say("Where is my order?")["result"]["task"]
 
     assert task["status"]["state"] == "TASK_STATE_REJECTED"
-    hub = task["metadata"]["agentEnforcer"]
+    hub = task["metadata"]["agentsOnRails"]
     assert hub["stage"] == "output"
     assert [(e["guardrailId"], e["verdict"]) for e in hub["trace"]] == [("relevance", "block")]
     [event] = MEMORY.events
@@ -508,7 +508,7 @@ def test_output_redaction_with_the_real_pii_guardrail() -> None:
     text = message["parts"][0]["text"]
     assert "jan.kowalski@example.com" not in text
     assert "[EMAIL]" in text
-    [entry] = message["metadata"]["agentEnforcer"]["trace"]
+    [entry] = message["metadata"]["agentsOnRails"]["trace"]
     assert entry["verdict"] == "redact"
     assert entry["engine"] == "library"
 
@@ -519,7 +519,7 @@ def test_output_redaction_covers_task_artifacts() -> None:
     task = say(f"#task {EMAIL}")["result"]["task"]
 
     assert task["artifacts"][0]["parts"] == [{"text": "Echo: #task [EMAIL]"}]
-    assert task["metadata"]["agentEnforcer"]["trace"][0]["verdict"] == "redact"
+    assert task["metadata"]["agentsOnRails"]["trace"][0]["verdict"] == "redact"
 
 
 def test_policy_loader_builds_the_policy_from_the_database_function() -> None:
@@ -652,7 +652,7 @@ def test_the_agent_receives_its_mcp_servers_and_only_its_tools(gateway: Recorder
     use(policy(), StubEngine({}))
     say("hello")
     sent = gateway.bodies[0]
-    assert sent["params"]["metadata"]["agentEnforcer"]["mcpServers"] == [
+    assert sent["params"]["metadata"]["agentsOnRails"]["mcpServers"] == [
         {
             "id": "mcp-orders",
             "name": "Orders",

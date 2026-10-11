@@ -45,11 +45,11 @@ Request: a JSON-RPC 2.0 `SendMessage`, exactly as a client would send to the gua
 
 Response: the guarded pipeline's JSON-RPC response: `result.message` (passed, redacted or warned)
 or `result.task` (a `TASK_STATE_REJECTED` refusal when blocked, or a finished task), or a JSON-RPC
-`error` passed through from the agent. Hub data lives in `metadata.agentEnforcer` on the message or
+`error` passed through from the agent. Hub data lives in `metadata.agentsOnRails` on the message or
 task:
 
 ```ts
-interface AgentEnforcerMetadata {
+interface AgentsOnRailsMetadata {
   blocked?: boolean
   stage?: 'input' | 'output'          // where a block happened
   trace?: TraceEntry[]
@@ -89,15 +89,15 @@ interface Reply {
   text: string            // text parts joined with "\n"; data parts as JSON; file parts "[file]"
   verdict: Verdict
   trace: TraceEntry[]
-  usage?: AgentEnforcerMetadata['usage']
-  limits: NonNullable<AgentEnforcerMetadata['limits']>
-  scores: NonNullable<AgentEnforcerMetadata['scores']>
+  usage?: AgentsOnRailsMetadata['usage']
+  limits: NonNullable<AgentsOnRailsMetadata['limits']>
+  scores: NonNullable<AgentsOnRailsMetadata['scores']>
   errorMessage?: string   // JSON-RPC error or transport failure
 }
 ```
 
 Verdict rules, in order: JSON-RPC `error` → `error`; task in `TASK_STATE_REJECTED` or
-`agentEnforcer.blocked` → `blocked`; any trace entry `redact` → `redacted`; any `warn` → `warned`;
+`agentsOnRails.blocked` → `blocked`; any trace entry `redact` → `redacted`; any `warn` → `warned`;
 else `passed`. Task text = `artifacts[].parts` text, then `status.message.parts` (contract §3). A
 task in a non-terminal state → `error` "The agent answered with an unfinished task (outside the
 hub's A2A profile)."

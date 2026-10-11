@@ -98,8 +98,8 @@ def test_pii_trigger_contains_an_email(client: TestClient) -> None:
 def test_context_echoes_hub_parts_and_ignores_them_as_user_text(client: TestClient) -> None:
     response = send(
         client,
-        {"text": "Be polite.", "metadata": {"agentEnforcer": "governance"}},
-        {"text": "Returns take 14 days.", "metadata": {"agentEnforcer": "context"}},
+        {"text": "Be polite.", "metadata": {"agentsOnRails": "governance"}},
+        {"text": "Returns take 14 days.", "metadata": {"agentsOnRails": "context"}},
         {"text": "#context"},
     )
     text = response["result"]["message"]["parts"][0]["text"]

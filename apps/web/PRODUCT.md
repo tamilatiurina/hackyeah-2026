@@ -19,7 +19,7 @@ the guarded chat flow to validate behavior without changing configuration.
 
 ## Product Purpose
 
-Agent Enforcer places centrally managed controls around A2A agents. It lets an organization
+AgentsOnRails.dev places centrally managed controls around A2A agents. It lets an organization
 register an existing agent, configure ordered input and output checks, issue a guarded replacement
 endpoint, and inspect the resulting sessions, traces, security scans, and audit events.
 
@@ -29,7 +29,7 @@ redacted, warned, blocked, or limited.
 
 ## Positioning
 
-Agent Enforcer is an A2A 1.0-compatible reverse gateway: the original and guarded endpoints both
+AgentsOnRails.dev is an A2A 1.0-compatible reverse gateway: the original and guarded endpoints both
 speak `SendMessage`, so a client switches one URL and adds an API key instead of integrating a
 governance SDK into each agent. Guardrails execute in a deterministic order and return a per-rule
 trace with each guarded interaction.
@@ -77,7 +77,7 @@ The product distinguishes these terms:
 
 ## Brand Commitments
 
-The product name is **Agent Enforcer**. Its voice is direct, operational, and specific, using factual
+The product name is **AgentsOnRails.dev**. Its voice is direct, operational, and specific, using factual
 language such as “guarded URL,” “runs first,” “never shown again,” and “counters only, no message
 content.” It must not imply that prototype, simulated, placeholder, or unimplemented behavior is
 production-ready.

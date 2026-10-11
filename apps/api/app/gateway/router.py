@@ -14,8 +14,8 @@ POST /a/<agent id>
 
      B-02: input guardrails run on the user message first (a block answers without calling
      the agent; a redaction changes what it receives), output guardrails on the reply, and the
-     trace goes in the reply's metadata.agentEnforcer. With no guardrails at all, the call and
-     the reply pass through byte for byte. The caller's role (params.metadata.agentEnforcer.role,
+     trace goes in the reply's metadata.agentsOnRails. With no guardrails at all, the call and
+     the reply pass through byte for byte. The caller's role (params.metadata.agentsOnRails.role,
      or the demo's top-level role) selects role bindings and is reported in the hub data.
 
 After a successful forward the gateway counts the turn for the message's contextId, and every

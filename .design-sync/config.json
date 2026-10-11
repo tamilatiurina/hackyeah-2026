@@ -2,7 +2,7 @@
   "projectId": "7365b80c-ef07-43b7-b3be-8b9f447b6b53",
   "shape": "package",
   "pkg": "web",
-  "globalName": "AgentEnforcer",
+  "globalName": "AgentsOnRails",
   "entry": "apps/web/src/ui/index.ts",
   "buildCmd": "node .design-sync/build-css.mjs",
   "cssEntry": "dist/ds.css",

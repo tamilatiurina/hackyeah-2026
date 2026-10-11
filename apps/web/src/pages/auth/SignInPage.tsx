@@ -35,7 +35,7 @@ export function SignInPage() {
 
   return (
     <AuthShell
-      title="Sign in to Agent Enforcer"
+      title="Sign in to AgentsOnRails.dev"
       notice={state.notice ?? authNotice}
       footer={
         <>

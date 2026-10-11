@@ -46,7 +46,7 @@ class CallUsage:
         return self.input_tokens + self.output_tokens
 
     def as_hub(self) -> a2a.Json:
-        """metadata.agentEnforcer.usage, in the shape the web's trace panel reads."""
+        """metadata.agentsOnRails.usage, in the shape the web's trace panel reads."""
         return {
             "inputTokens": self.input_tokens,
             "outputTokens": self.output_tokens,
@@ -71,7 +71,7 @@ class LimitCheck:
         return self.used > self.max
 
     def as_meter(self) -> a2a.Json:
-        """One metadata.agentEnforcer.limits entry: { name, used, max, unit }."""
+        """One metadata.agentsOnRails.limits entry: { name, used, max, unit }."""
         return {"name": self.name, "used": round(self.used, 6), "max": self.max, "unit": self.unit}
 
     def reason(self) -> str:

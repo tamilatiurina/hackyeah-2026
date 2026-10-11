@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the Vite starter in `apps/web` with the Agent Enforcer control-panel shell (sidebar, routes, role switcher, phone drawer) from the prototype.
+**Goal:** Replace the Vite starter in `apps/web` with the AgentsOnRails.dev control-panel shell (sidebar, routes, role switcher, phone drawer) from the prototype.
 
 **Architecture:** One route table (`app/nav.ts`) drives both the sidebar nav and `<Routes>`. A `RoleContext` holds the viewing role (persisted in `localStorage`); `AppRoutes` only registers the routes the current role may see and redirects everything else to that role's home. `Layout` owns the phone drawer state and renders `Sidebar` + `<Outlet/>`. Every page is a `Placeholder` naming the issue that will fill it.
 
@@ -251,7 +251,7 @@ Replace `apps/web/index.html`:
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <title>Agent Enforcer</title>
+    <title>AgentsOnRails.dev</title>
   </head>
   <body>
     <div id="root"></div>
@@ -278,7 +278,7 @@ import { Placeholder } from './pages/Placeholder'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Placeholder title="Agent Enforcer" issue="D-01" />
+    <Placeholder title="AgentsOnRails.dev" issue="D-01" />
   </StrictMode>,
 )
 ```
@@ -727,7 +727,7 @@ export function Brand() {
         <path d="M9 12l2 2 4-4" />
       </svg>
       <div className="flex flex-col">
-        <span className="text-base font-bold text-white">Agent Enforcer</span>
+        <span className="text-base font-bold text-white">AgentsOnRails.dev</span>
         <span className="text-xs text-sidebar-subtle">Acme workspace</span>
       </div>
     </div>

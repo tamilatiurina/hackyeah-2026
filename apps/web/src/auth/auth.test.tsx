@@ -38,7 +38,7 @@ describe('sign-in', () => {
     const user = userEvent.setup()
     renderApp('/guardrails', { signedIn: false })
     expect(location()).toBe('/sign-in')
-    expect(screen.getByRole('heading', { name: 'Sign in to Agent Enforcer' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to AgentsOnRails.dev' })).toBeInTheDocument()
     await signIn(user)
     await waitFor(() => expect(location()).toBe('/guardrails'))
   })
