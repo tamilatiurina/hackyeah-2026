@@ -41,7 +41,7 @@ export function simulateTestChat(request: SendMessageRequest, { serial }: Simula
         contextId,
         role: 'ROLE_AGENT',
         parts: [{ text: replyText }],
-        metadata: { agentEnforcer: { trace: runs, usage, limits } },
+        metadata: { agentsOnRails: { trace: runs, usage, limits } },
       },
     },
   })
@@ -56,7 +56,7 @@ export function simulateTestChat(request: SendMessageRequest, { serial }: Simula
           state: 'TASK_STATE_REJECTED',
           message: { messageId: `agent-${serial}`, role: 'ROLE_AGENT', parts: [{ text: why }] },
         },
-        metadata: { agentEnforcer: { blocked: true, stage, trace: runs, usage, limits } },
+        metadata: { agentsOnRails: { blocked: true, stage, trace: runs, usage, limits } },
       },
     },
   })

@@ -26,12 +26,12 @@ MAX_SELECTOR_LENGTH = 120
 def read_role(call: Json) -> tuple[str | None, bool]:
     """The caller's role, and whether a non-A2A top-level `role` was stripped off `call`.
 
-    Strongest first: `params.metadata.agentEnforcer.role`, then a demo top-level `role`.
+    Strongest first: `params.metadata.agentsOnRails.role`, then a demo top-level `role`.
     The top-level field is not A2A, so it is removed before the call is forwarded.
     """
     params = call.get("params")
     metadata = params.get("metadata") if isinstance(params, dict) else None
-    hub = metadata.get("agentEnforcer") if isinstance(metadata, dict) else None
+    hub = metadata.get("agentsOnRails") if isinstance(metadata, dict) else None
     hub_role = hub.get("role") if isinstance(hub, dict) else None
     stripped = False
     top_role: Any = None

@@ -67,11 +67,11 @@ Request: a JSON-RPC 2.0 `SendMessage`, exactly as a client would send to the gua
 
 Response: the guarded pipeline's JSON-RPC response: `result.message` (passed, redacted or warned)
 or `result.task` (a `TASK_STATE_REJECTED` refusal when blocked, or a finished task), or a JSON-RPC
-`error` passed through from the agent. Hub data lives in `metadata.agentEnforcer` on the message or
+`error` passed through from the agent. Hub data lives in `metadata.agentsOnRails` on the message or
 task:
 
 ```ts
-interface AgentEnforcerMetadata {
+interface AgentsOnRailsMetadata {
   blocked?: boolean
   stage?: 'input' | 'output'          // where a block happened
   trace?: TraceEntry[]
@@ -199,6 +199,6 @@ Signed-in Bearer token required (401 without one when Supabase is configured).
 - `DELETE /api/v1/agents/{agent_id}/mcp-servers/{server_id}` → 204; 404 if the agent had no access.
 
 Only an agent's owner sees or changes its MCP access (RLS). On every call the gateway and the test
-chat send the agent its servers and tools in `params.metadata.agentEnforcer.mcpServers` (see
+chat send the agent its servers and tools in `params.metadata.agentsOnRails.mcpServers` (see
 `docs/agent-contract-a2a.md`); credentials never leave the hub.
 

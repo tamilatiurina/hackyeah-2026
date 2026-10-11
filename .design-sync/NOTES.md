@@ -1,4 +1,4 @@
-# design-sync notes (Agent Enforcer)
+# design-sync notes (AgentsOnRails.dev)
 
 Target project: https://claude.ai/design/p/7365b80c-ef07-43b7-b3be-8b9f447b6b53 (pinned in config.json).
 
@@ -6,7 +6,7 @@ Target project: https://claude.ai/design/p/7365b80c-ef07-43b7-b3be-8b9f447b6b53 
 
 - `apps/web` is an app, not a published library: no `dist/` entry and no `.d.ts` tree. The converter bundles the barrel `apps/web/src/ui/index.ts` (`cfg.entry`), which re-exports the UI primitives, the app shell (Brand, Sidebar, Layout), the class strings from `src/ui/classes.ts` and the Auth/Role contexts the shell reads. New shared components must be added to that barrel AND to `cfg.componentSrcMap`.
 - Props are hand-written in `cfg.dtsPropsFor` (no `.d.ts` to extract from). If a component's props change in source, update its entry there or the uploaded contract goes stale.
-- `react-router` is merged into `window.AgentEnforcer` via `cfg.extraEntries`, so previews and designs can use `MemoryRouter`/`Routes`/`Route`. Previews import everything from `'web'`.
+- `react-router` is merged into `window.AgentsOnRails` via `cfg.extraEntries`, so previews and designs can use `MemoryRouter`/`Routes`/`Route`. Previews import everything from `'web'`.
 - CSS: run `cfg.buildCmd` (`node .design-sync/build-css.mjs`) before the converter. The app's vite CSS only holds utilities its own source uses; build-css compiles the real `src/index.css` (`@theme` tokens) with app sources, `.design-sync/previews/` and a safelist of brand-token utility families into `apps/web/dist/ds.css` (`cfg.cssEntry`, gitignored). A class used in a new preview only exists after build-css reruns, and `preview-rebuild.mjs` does NOT recopy CSS: do a full `package-build.mjs` after CSS changes.
 - Fonts: IBM Plex Sans/Mono come from Google Fonts via an `@import url(...)` that build-css prepends (same URL as `apps/web/index.html`). `[FONT_REMOTE]` is expected.
 - Render check: the cached chromium is build 1208, which needs `playwright@1.58.2` in `.ds-sync/`.

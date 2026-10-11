@@ -1,7 +1,7 @@
 """FR-17: give an agent access to registered MCP servers and choose its tools.
 
 The gateway passes each agent's access to it on every call, in
-params.metadata.agentEnforcer.mcpServers (docs/agent-contract-a2a.md).
+params.metadata.agentsOnRails.mcpServers (docs/agent-contract-a2a.md).
 """
 
 from typing import Annotated

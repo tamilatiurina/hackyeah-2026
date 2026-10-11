@@ -1,6 +1,6 @@
 # Demo agent (stateless)
 
-A minimal, configurable **A2A 1.0** agent for the Agent Enforcer demo (contract: [docs/agent-contract-a2a.md](../../docs/agent-contract-a2a.md)). The server stores nothing; A2A sends one message per call, and each message is answered on its own.
+A minimal, configurable **A2A 1.0** agent for the AgentsOnRails.dev demo (contract: [docs/agent-contract-a2a.md](../../docs/agent-contract-a2a.md)). The server stores nothing; A2A sends one message per call, and each message is answered on its own.
 
 It is deliberately **unguarded**: its prompt holds sensitive data (a customer record, an internal note, etc.), so it leaks it when asked. That is the "before" state the hub fixes.
 
@@ -13,7 +13,7 @@ GET  /.well-known/agent-card.json   -> Agent Card: name, skills, one JSONRPC int
 POST /a2a                           -> JSON-RPC 2.0, method SendMessage, header A2A-Version: 1.0
 ```
 
-The reply is `{"result": {"message": {"role": "ROLE_AGENT", "parts": [{"text": "..."}], ...}}}`; with a real model it carries `metadata.usage = {inputTokens, outputTokens}` so the hub can count tokens. Text parts the hub tags with `metadata.agentEnforcer` (governance prompt, context) are appended to the system prompt. Other A2A methods (streaming, tasks) answer `-32004`.
+The reply is `{"result": {"message": {"role": "ROLE_AGENT", "parts": [{"text": "..."}], ...}}}`; with a real model it carries `metadata.usage = {inputTokens, outputTokens}` so the hub can count tokens. Text parts the hub tags with `metadata.agentsOnRails` (governance prompt, context) are appended to the system prompt. Other A2A methods (streaming, tasks) answer `-32004`.
 
 ## Environment variables
 

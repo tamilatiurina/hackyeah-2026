@@ -90,7 +90,7 @@ def say(text: str, context_id: str | None = "ctx-1") -> dict[str, Any]:
 def hub_of(body: dict[str, Any]) -> dict[str, Any]:
     result = body["result"]
     holder = result["message"] if "message" in result else result["task"]
-    hub: dict[str, Any] = holder["metadata"]["agentEnforcer"]
+    hub: dict[str, Any] = holder["metadata"]["agentsOnRails"]
     return hub
 
 
@@ -172,7 +172,7 @@ def test_a_blocking_token_cap_withholds_the_reply(monkeypatch: pytest.MonkeyPatc
     reason = task["status"]["message"]["parts"][0]["text"]
     assert reason.startswith('Blocked by limit "Tokens per call: used')
     assert "word199" not in json.dumps(body)  # the long reply never reaches the caller
-    hub = task["metadata"]["agentEnforcer"]
+    hub = task["metadata"]["agentsOnRails"]
     assert hub["blocked"] is True and hub["usage"]["outputTokens"] > 50
     [event] = MEMORY.events
     assert (event.rule_id, event.action, event.context_id) == ("maxCallTokens", "block", None)

@@ -1,4 +1,4 @@
-// Public surface of the Agent Enforcer UI kit: the shared primitives, the app shell and the
+// Public surface of the AgentsOnRails.dev UI kit: the shared primitives, the app shell and the
 // contexts the shell reads. Also the entry the design-sync converter bundles (.design-sync/).
 export { EmptyState, LoadingRows, PageHeader, PageShell, TableFrame } from './Page'
 export { LiveBadge } from './LiveBadge'

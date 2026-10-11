@@ -116,7 +116,7 @@ def chat(
         message["contextId"] = context_id
     params: dict[str, Any] = {"message": message}
     if role is not None:  # the caller's role, as on the guarded URL
-        params["metadata"] = {"agentEnforcer": {"role": role}}
+        params["metadata"] = {"agentsOnRails": {"role": role}}
     body = {"jsonrpc": "2.0", "id": "req-1", "method": "SendMessage", "params": params}
     r = client.post(PATH, json=body)
     assert r.status_code == 200, r.text
@@ -128,7 +128,7 @@ def chat(
 def hub_of(answer: dict[str, Any]) -> dict[str, Any]:
     result = answer["result"]
     holder = result["message"] if "message" in result else result["task"]
-    hub: dict[str, Any] = holder["metadata"]["agentEnforcer"]
+    hub: dict[str, Any] = holder["metadata"]["agentsOnRails"]
     return hub
 
 
@@ -353,7 +353,7 @@ def test_openapi_documents_the_test_chat() -> None:
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     assert request_ref.endswith("/ChatRequest")
     assert response_ref.endswith("/ChatResponse")
-    hub = spec["components"]["schemas"]["AgentEnforcerMetadata"]["properties"]
+    hub = spec["components"]["schemas"]["AgentsOnRailsMetadata"]["properties"]
     assert {"trace", "usage", "limits", "scores", "blocked", "stage"} <= hub.keys()
 
 
@@ -410,7 +410,7 @@ def test_guarded_url_reports_the_demo_role_and_strips_it() -> None:
     }
     r = client.post(f"/a/{AGENT_ID}", json=call, headers={"X-API-Key": "gk_key"})
 
-    hub = r.json()["result"]["message"]["metadata"]["agentEnforcer"]
+    hub = r.json()["result"]["message"]["metadata"]["agentsOnRails"]
     assert hub["role"] == "intern"
     assert ("gr-competitors", "role") in [(e["guardrailId"], e["source"]) for e in hub["trace"]]
 
@@ -429,7 +429,7 @@ def test_the_test_chat_tells_the_agent_its_mcp_servers(agent: Agent) -> None:
     )
     InMemoryAgentMcpRepository().put(AGENT_ID, server, ["search_docs"])
     chat("hello")
-    hub = agent.bodies[0]["params"]["metadata"]["agentEnforcer"]
+    hub = agent.bodies[0]["params"]["metadata"]["agentsOnRails"]
     assert hub["mcpServers"] == [
         {
             "id": "mcp-docs",

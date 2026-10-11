@@ -2,7 +2,7 @@
 
 The signed-in owner sends an A2A SendMessage call. It goes through the same guarded path as
 the agent's guarded URL (app.gateway.service): input guardrails, the agent, output guardrails.
-The answer is the A2A reply with metadata.agentEnforcer holding the full trace, the token usage,
+The answer is the A2A reply with metadata.agentsOnRails holding the full trace, the token usage,
 the limits used and the evaluator scores. The turn is counted in the session (A-07) and every
 block, redaction and warning goes to the audit log, recorded as the signed-in owner.
 
@@ -120,7 +120,7 @@ class EvaluatorScore(BaseModel):
     score: float
 
 
-class AgentEnforcerMetadata(BaseModel):
+class AgentsOnRailsMetadata(BaseModel):
     policyVersion: str | None = Field(
         default=None, description="Hash of the resolved guardrail set; changes on config edits"
     )
@@ -136,7 +136,7 @@ class AgentEnforcerMetadata(BaseModel):
 
 
 class ReplyMetadata(_A2AModel):
-    agentEnforcer: AgentEnforcerMetadata | None = None
+    agentsOnRails: AgentsOnRailsMetadata | None = None
 
 
 class ReplyMessage(A2AMessage):
@@ -218,7 +218,7 @@ async def send_test_chat_message(
     message.setdefault("contextId", f"ctx-{uuid4()}")  # one contextId per chat
 
     # The test chat knows who is asking: the signed-in owner, so their user bindings apply. A
-    # caller role in params.metadata.agentEnforcer.role selects role bindings, as on the guarded
+    # caller role in params.metadata.agentsOnRails.role selects role bindings, as on the guarded
     # URL. Resolved exactly like GET /effective-guardrails.
     role, _ = read_role(call)
     policy = await run_in_threadpool(

@@ -1,6 +1,6 @@
-# Agent Enforcer UI conventions
+# AgentsOnRails.dev UI conventions
 
-Agent Enforcer is a control room for AI agents: calm, dense, operational. Off-white canvas, white surfaces with hairline borders, one teal accent, a near-black sidebar. IBM Plex Sans for text, IBM Plex Mono for URLs, ids and code.
+AgentsOnRails.dev is a control room for AI agents: calm, dense, operational. Off-white canvas, white surfaces with hairline borders, one teal accent, a near-black sidebar. IBM Plex Sans for text, IBM Plex Mono for URLs, ids and code.
 
 ## Styling idiom: Tailwind utilities on brand tokens
 
@@ -27,7 +27,7 @@ Rhythm: pages stack sections with `gap-7` (PageShell does this); cards use `p-5`
 Buttons, inputs and badges are plain elements styled with exported class strings. Use them instead of inventing button styles:
 
 ```jsx
-const { buttonPrimary, buttonSecondary, inputClass, badgeClass, pillClass } = window.AgentEnforcer
+const { buttonPrimary, buttonSecondary, inputClass, badgeClass, pillClass } = window.AgentsOnRails
 <button className={buttonPrimary}>Register agent</button>
 <button className={buttonSecondary}>Cancel</button>
 <input className={inputClass} aria-invalid={false} />
@@ -40,7 +40,7 @@ const { buttonPrimary, buttonSecondary, inputClass, badgeClass, pillClass } = wi
 Every page is `PageShell` > `PageHeader` > content. Lists show `LoadingRows` while loading, `EmptyState` when empty, and a `<table>` inside `TableFrame` otherwise. `LiveBadge` goes in `PageHeader` `actions` for pages with live updates. A status pill beside the title goes in `PageHeader` `badge` (agents: `bg-warn-bg text-warn-fg` "Setup · 2 of 5" until live, then `bg-teal-soft text-teal-dark` "Live"). Inside `Layout`, `useToast()` returns a function that shows a short top-right confirmation (e.g. `toast('Guarded URL copied.')`).
 
 ```jsx
-const { PageShell, PageHeader, TableFrame, buttonPrimary } = window.AgentEnforcer
+const { PageShell, PageHeader, TableFrame, buttonPrimary } = window.AgentsOnRails
 <div className="bg-canvas p-6">
   <PageShell>
     <PageHeader title="Agents" description="Proxy agents sit behind a guarded URL."
@@ -57,7 +57,7 @@ const { PageShell, PageHeader, TableFrame, buttonPrimary } = window.AgentEnforce
 `Sidebar` and `Layout` read a router and the auth context, and throw without them. `Layout` renders the routed page through `<Outlet>`, so use it as a parent route. Wrap like this (all exported from the bundle, react-router included):
 
 ```jsx
-const { MemoryRouter, Routes, Route, AuthContext, Layout } = window.AgentEnforcer
+const { MemoryRouter, Routes, Route, AuthContext, Layout } = window.AgentsOnRails
 const auth = { status: 'ready', configured: true, notice: null, watchTables: null,
   session: { accessToken: '', userId: 'preview-user', email: 'maria@acme.dev' },
   signIn: async () => null, signUp: async () => ({ error: null, confirmEmail: false }),

@@ -3,7 +3,7 @@
 1. Input guardrails on the user message (a block answers without calling the agent; a
    redaction changes what the agent receives).
 2. Forward to the agent's JSON-RPC endpoint with A2A-Version: 1.0 and its stored auth header.
-3. Output guardrails on the reply, then the trace in metadata.agentEnforcer.
+3. Output guardrails on the reply, then the trace in metadata.agentsOnRails.
 4. Audit (A-07): the turn is counted when the agent answered, and every block, redaction and
    warning is recorded as an audit event. Audit failures are logged and never change the reply.
 """
@@ -203,7 +203,7 @@ def _hub(
     usage: limits.CallUsage | None = None,
     meters: list[a2a.Json] | None = None,
 ) -> a2a.Json:
-    """metadata.agentEnforcer: the trace, the policy version, the caller's role, and (B-05) the
+    """metadata.agentsOnRails: the trace, the policy version, the caller's role, and (B-05) the
     call's token and cost figures and the limits it used."""
     hub: a2a.Json = {"trace": dump_trace(trace), "policyVersion": policy.version}
     if role is not None:
@@ -232,7 +232,7 @@ def _blocked(
 
 
 def _add_mcp_servers(call: a2a.Json, mcp_servers: list[a2a.Json]) -> None:
-    """Put the agent's MCP access in params.metadata.agentEnforcer.mcpServers, keeping whatever
+    """Put the agent's MCP access in params.metadata.agentsOnRails.mcpServers, keeping whatever
     else the caller sent in params metadata."""
     params: a2a.Json = call["params"]
     metadata = params.get("metadata")
@@ -262,7 +262,7 @@ async def send_guarded(
     and the agent's answer comes back byte for byte. Pass None when the call was changed (for
     example a demo `role` field stripped off it). `role` selects role bindings and is reported.
     `mcp_servers` (FR-17) are the MCP servers and tools the agent may use; the agent gets them in
-    params.metadata.agentEnforcer.mcpServers.
+    params.metadata.agentsOnRails.mcpServers.
     """
     rpc_id = call.get("id")
     message: a2a.Json = call["params"]["message"]

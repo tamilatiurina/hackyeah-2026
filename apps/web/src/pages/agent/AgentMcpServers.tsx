@@ -9,7 +9,7 @@ import { useToast } from '../../ui/toastContext'
 import { ChevronRight, sectionCard, sectionText, sectionTitle, smallButton, textLink } from './workspaceUi'
 
 /** Setup step 3 (FR-17), optional: which registered MCP servers this agent may use, and which of
- * their tools. The agent gets this list on every call (params.metadata.agentEnforcer.mcpServers);
+ * their tools. The agent gets this list on every call (params.metadata.agentsOnRails.mcpServers);
  * credentials stay in the hub. */
 export function AgentMcpServers({ agent }: { agent: Agent }) {
   const access = useAgentMcpServers(agent.id)

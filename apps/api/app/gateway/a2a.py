@@ -97,7 +97,7 @@ def is_valid_send_message_result(result: Any) -> bool:
 # --- B-02: the text guardrails see, and the hub's data in replies ----------------------------
 
 # Hub data in a message, task or part lives in its metadata under this key (contract §4).
-METADATA_KEY = "agentEnforcer"
+METADATA_KEY = "agentsOnRails"
 
 
 def text_parts(holders: list[Json]) -> list[Json]:
