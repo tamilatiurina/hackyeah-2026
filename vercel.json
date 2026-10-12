@@ -32,6 +32,7 @@
     { "source": "/demo-agent/(.*)", "destination": { "service": "demo-agent" } },
     { "source": "/", "destination": { "service": "landing" } },
     { "source": "/_astro/(.*)", "destination": { "service": "landing" } },
+    { "source": "/media/(.*)", "destination": { "service": "landing" } },
     { "source": "/(.*)", "destination": { "service": "web" } }
   ]
 }

@@ -6,8 +6,9 @@ https://agentsonrails.dev/agents
 Landing page:  
 https://agentsonrails.dev/#how
 
-Quick guardrails showcase:  
-https://github.com/user-attachments/assets/ee1e1934-8652-417a-a219-bddbe61ccb2c
+Watch the 30-second demo (click to play):
+
+[![AgentsOnRails.dev demo: a guarded test chat and its trace](apps/landing/public/media/promo-poster.jpg)](https://agentsonrails.dev/media/promo.mp4)
 
 
 AI Control Layer: put guardrails in front of any A2A agent, watch every rule fire live, and change them without redeploying the agent.
