@@ -1,10 +1,10 @@
 # AgentsOnRails.dev
 
 See for yourself:  
-https://hackyeah-2026-theta.vercel.app/agents
+https://agentsonrails.dev/agents
 
 Landing page:  
-https://hackyeah-2026-c3ff.vercel.app/#how
+https://agentsonrails.dev/#how
 
 Quick guardrails showcase:  
 https://github.com/user-attachments/assets/ee1e1934-8652-417a-a219-bddbe61ccb2c
@@ -14,7 +14,7 @@ AI Control Layer: put guardrails in front of any A2A agent, watch every rule fir
 
 ## Tutorial
 
-Try it on the [live app](https://hackyeah-2026-theta.vercel.app) or [run it locally](#first-time-setup). Create an account with your email, GitHub or Google; everything you add is private to your account. A new account starts with the demo support agent and a starter set of guardrails. Each agent has its own workspace that walks you through setup.
+Try it on the [live app](https://agentsonrails.dev) or [run it locally](#first-time-setup). Create an account with your email, GitHub or Google; everything you add is private to your account. A new account starts with the demo support agent and a starter set of guardrails. Each agent has its own workspace that walks you through setup.
 
 | #   | Go to                                   | Do this                                                                          |
 | --- | --------------------------------------- | -------------------------------------------------------------------------------- |
@@ -55,7 +55,7 @@ You do not need to install Python yourself: uv downloads the version pinned in `
 
 ```bash
 git clone <repo-url>
-cd hackyeah-2026
+cd agent-enforcer
 
 make install                 # installs all Python and web dependencies
 uv run pre-commit install    # runs ruff automatically on every commit

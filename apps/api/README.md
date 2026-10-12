@@ -4,8 +4,6 @@ Deploy your [FastAPI](https://fastapi.tiangolo.com/) project to Vercel with zero
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/vercel/vercel/tree/main/examples/fastapi&template=fastapi)
 
-_Live Example: https://vercel-plus-fastapi.vercel.app/_
-
 Visit the [FastAPI documentation](https://fastapi.tiangolo.com/) to learn more.
 
 ## Project Structure
