@@ -32,7 +32,8 @@ export function Sidebar({ id, open, onNavigate, counts = {} }: SidebarProps) {
           return (
             <Fragment key={item.path}>
               {startsSection && (
-                <span className="mt-4 mb-1 block px-3 text-[11px] font-semibold tracking-[0.08em] text-sidebar-subtle uppercase">
+                // a divider, not a row: a hairline rule and no row padding so it can't pass for a link
+                <span className="mt-5 mb-1.5 flex cursor-default items-center gap-2 pl-1 text-[10px] font-semibold tracking-[0.12em] text-sidebar-subtle uppercase select-none after:h-px after:flex-1 after:bg-sidebar-active after:content-['']">
                   {item.section}
                 </span>
               )}
