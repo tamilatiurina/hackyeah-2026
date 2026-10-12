@@ -1,4 +1,4 @@
-"""Stateless demo agent for the Guardrail Hub hackathon demo, speaking A2A 1.0.
+"""Stateless demo agent for the AgentsOnRails.dev hackathon demo, speaking A2A 1.0.
 
 The server stores nothing, so any number of instances can run behind one URL, and the hub
 can sit in front of it without the agent knowing. Contract (docs/agent-contract-a2a.md):
@@ -6,8 +6,10 @@ can sit in front of it without the agent knowing. Contract (docs/agent-contract-
     GET  /.well-known/agent-card.json    A2A Agent Card (one JSON-RPC interface at /a2a)
     POST /a2a                            JSON-RPC 2.0, method SendMessage, header A2A-Version: 1.0
 
+Both paths move under BASE_PATH when it is set (e.g. /demo-agent/a2a).
+
 A2A sends one message per call, so each message is answered on its own. Text parts the hub
-tags with metadata.guardrailHub ("governance", "context") are added to the system prompt.
+tags with metadata.agentsOnRails ("governance", "context") are added to the system prompt.
 
 This agent is deliberately UNGUARDED: its prompt holds a customer record and an internal
 note, so it will leak them when asked. That is the "before" picture the hub's guardrails fix.
@@ -49,6 +51,9 @@ AGENT_API_KEY = os.getenv("AGENT_API_KEY")
 MOCK = os.getenv("MOCK", "0") == "1"
 # Base URL written into the Agent Card; set it when running behind a tunnel or proxy.
 PUBLIC_URL = os.getenv("PUBLIC_URL")
+# Path prefix for both routes, e.g. "/demo-agent" when the agent shares a domain with the hub
+# (the demo-agent service in the root vercel.json). Empty: served at the root.
+BASE_PATH = os.getenv("BASE_PATH", "").rstrip("/")
 
 PROTOCOL_VERSION = "1.0"
 RPC_PATH = "/a2a"
@@ -155,7 +160,7 @@ def split_parts(message: Message) -> tuple[str, list[str]]:
     for part in message.parts:
         if part.text is None:
             continue
-        if isinstance((part.metadata or {}).get("guardrailHub"), str):
+        if isinstance((part.metadata or {}).get("agentsOnRails"), str):
             hub.append(part.text)
         else:
             user.append(part.text)
@@ -215,12 +220,12 @@ def rpc_error(request_id: str | int | None, code: int, message: str) -> JSONResp
     return JSONResponse(error)
 
 
-@app.get("/.well-known/agent-card.json")
+@app.get(BASE_PATH + "/.well-known/agent-card.json")
 def card(request: Request) -> dict[str, Any]:
-    return agent_card(PUBLIC_URL or str(request.base_url))
+    return agent_card(PUBLIC_URL or str(request.base_url).rstrip("/") + BASE_PATH)
 
 
-@app.post(RPC_PATH)
+@app.post(BASE_PATH + RPC_PATH)
 async def rpc(request: Request) -> Response:
     if not authorized(request):
         return PlainTextResponse("Invalid or missing API key", status_code=401)

@@ -29,7 +29,18 @@ export interface Agent {
   /** Null for agents registered before A2A. */
   agent_card: AgentCard | null
   config_version?: number
+  /** Setup progress (missing means false). A gateway key exists: the agent is live. */
+  has_gateway_key?: boolean
+  /** The guardrails step was finished, even with nothing attached. */
+  guardrails_reviewed?: boolean
+  /** The optional MCP tools step was finished or skipped. */
+  mcp_reviewed?: boolean
+  /** A test-chat call has gone through the guarded pipeline. */
+  tested?: boolean
 }
+
+/** Setup steps the owner can finish without attaching anything (POST /agents/{id}/setup/{step}). */
+export type ReviewableStep = 'guardrails' | 'mcp'
 
 export interface AgentRegistration {
   base_url: string
@@ -97,7 +108,7 @@ export interface GuardrailRule {
 export interface GuardrailCreate extends GuardrailRule {
   name: string
   description: string | null
-  /** FR-06: applies to every agent and cannot be detached. Admin only. */
+  /** FR-06: applies to all of the owner's agents and cannot be detached from one. */
   is_mandatory?: boolean
 }
 

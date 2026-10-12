@@ -18,12 +18,12 @@ from app.gateway.pipeline import LocalEngine
 from app.gateway.resolver import UpstreamTarget
 from app.guardrails.judge import JudgeVerdict, get_judge
 from app.main import app
-from app.security import repository
 from app.security.grade import NEEDS_JUDGE, Outcome, evidence, grade
 from app.security.probes import PROBES, Probe
 from app.security.runner import OUT_OF_TIME, run_scan, static_checks
 from fastapi.testclient import TestClient
 from pydantic import HttpUrl
+from tests import fakes
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test-agent" / "src"))
 from acme_test_agent.app import create_app as create_test_agent  # noqa: E402
@@ -80,7 +80,6 @@ def agent(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(gateway_service, "ensure_public_upstream", allow)
     app.dependency_overrides[gateway_service.get_gateway_http_client] = http
     app.dependency_overrides[get_agent_database] = lambda: database([AGENT_ROW])
-    repository.MEMORY.clear()
     yield
     app.dependency_overrides.clear()
 
@@ -108,7 +107,7 @@ def test_the_stream_starts_reports_each_probe_then_saves_a_summary() -> None:
     assert saved["id"] == events[0]["scanId"]
     assert saved["summary"]["total"] == len(PROBES)
     assert [r["probeId"] for r in saved["results"]] == [p.id for p in PROBES]  # pack order
-    assert saved["id"] in repository.MEMORY
+    assert saved["id"] in fakes.SCANS
 
 
 def test_an_echoed_canary_is_vulnerable_and_the_injection_guardrail_stops_it() -> None:

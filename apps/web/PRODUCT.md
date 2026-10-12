@@ -19,7 +19,7 @@ the guarded chat flow to validate behavior without changing configuration.
 
 ## Product Purpose
 
-Guardrail Hub places centrally managed controls around A2A agents. It lets an organization
+AgentsOnRails.dev places centrally managed controls around A2A agents. It lets an organization
 register an existing agent, configure ordered input and output checks, issue a guarded replacement
 endpoint, and inspect the resulting sessions, traces, security scans, and audit events.
 
@@ -29,7 +29,7 @@ redacted, warned, blocked, or limited.
 
 ## Positioning
 
-Guardrail Hub is an A2A 1.0-compatible reverse gateway: the original and guarded endpoints both
+AgentsOnRails.dev is an A2A 1.0-compatible reverse gateway: the original and guarded endpoints both
 speak `SendMessage`, so a client switches one URL and adds an API key instead of integrating a
 governance SDK into each agent. Guardrails execute in a deterministic order and return a per-rule
 trace with each guarded interaction.
@@ -50,10 +50,6 @@ The product distinguishes these terms:
 - **Session:** an A2A conversation keyed by `contextId`; it is not a stored transcript.
 - **Audit event:** a gateway block, redaction, warning, or limit hit.
 
-`Agent Integrated`, the pi coding-agent control layer and its file-based `.pi/policy.json`, is a
-prototype/demo surface rather than a core Guardrail Hub product area. Its policies, incidents, and
-hostname-based agent identity must not be conflated with the gateway concepts above.
-
 ## Capabilities and Constraints
 
 - Register A2A 1.0 JSON-RPC agents by base URL and discover their Agent Card.
@@ -65,8 +61,9 @@ hostname-based agent identity must not be conflated with the gateway concepts ab
   rule verdicts, reasons, latency, usage, cost, and simulated state.
 - Review session counters and costs, negative audit events, OWASP LLM Top 10 security scans, and
   registered MCP servers with tool allowlists.
-- Support Admin, Developer, and Tester workflows. Current role selection and authorization are demo
-  implementations and are not a production identity or permissions model.
+- Give every user a private workspace: Supabase accounts (email and password, GitHub, Google),
+  every database row owned by one user, and row-level security that returns only the owner's rows.
+  New accounts start with the seed guardrails, injection signatures and the demo agent.
 - Store session counters rather than conversation content. Audit details contain short reasons, not
   message text. Agent and MCP secrets are not returned to the frontend.
 - Fail closed when a mandatory guardrail engine errors; optional guardrails fail open with a
@@ -76,11 +73,11 @@ hostname-based agent identity must not be conflated with the gateway concepts ab
 - Named gateway policies, exemptions, complete approval and evaluator workflows, and MCP-to-agent
   attachment are not current capabilities or product commitments. Future work must not claim them
   without renewed approval.
-- Whether anonymous guest access belongs in production remains undecided.
+- Shared team workspaces, roles and anonymous guest access are not current capabilities.
 
 ## Brand Commitments
 
-The product name is **Guardrail Hub**. Its voice is direct, operational, and specific, using factual
+The product name is **AgentsOnRails.dev**. Its voice is direct, operational, and specific, using factual
 language such as “guarded URL,” “runs first,” “never shown again,” and “counters only, no message
 content.” It must not imply that prototype, simulated, placeholder, or unimplemented behavior is
 production-ready.
@@ -91,10 +88,9 @@ the approved canonical brand asset remains undecided.
 ## Evidence on Hand
 
 - The working React application in `src/` contains the implemented registration, guardrail,
-  deployment, test, session, audit, MCP, security-scan, policy-demo, playground, and incident flows.
+  deployment, test, session, audit, MCP, and security-scan flows.
 - The gateway contract is documented in `../../docs/agent-contract-a2a.md`.
 - Product and implementation decisions are recorded in `../../docs/superpowers/specs/`.
-- The pi control-layer schema and example policy live in `../../packages/pi-control-layer/`.
 - The marketing implementation in `../landing/` provides product language, but unsupported claims
   there are not accepted evidence of shipped functionality.
 - There are no approved customer testimonials, case studies, benchmarks, pricing claims, or press

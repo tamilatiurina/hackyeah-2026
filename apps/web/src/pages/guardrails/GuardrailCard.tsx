@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useDeleteGuardrail, useUpdateGuardrail } from '../../api/guardrails'
-import { useRole } from '../../app/role'
 import type { Guardrail } from '../../api/types'
 import { badgeClass, buttonSecondary } from '../../ui/classes'
 import { ACTION_LABELS, engineLabel, stageLabel } from './guardrailDisplay'
@@ -15,10 +14,7 @@ const smallButton = `${buttonSecondary} min-h-11 px-3 text-xs`
 export function GuardrailCard({ guardrail, highlighted }: GuardrailCardProps) {
   const update = useUpdateGuardrail()
   const remove = useDeleteGuardrail()
-  const { role } = useRole()
   const mandatory = guardrail.is_mandatory === true
-  // FR-06: the company-wide floor is an admin decision; everyone else sees it read-only.
-  const locked = mandatory && role !== 'admin'
   const [confirming, setConfirming] = useState(false)
   const nameId = `guardrail-${guardrail.id}-name`
 
@@ -44,7 +40,7 @@ export function GuardrailCard({ guardrail, highlighted }: GuardrailCardProps) {
             <rect x="5" y="11" width="14" height="10" rx="2" />
             <path d="M8 11V7a4 4 0 0 1 8 0v4" />
           </svg>
-          Mandatory · runs first on every agent
+          Mandatory · runs first on all your agents
         </p>
       )}
       {guardrail.description && <p className="m-0 text-sm text-muted">{guardrail.description}</p>}
@@ -57,25 +53,23 @@ export function GuardrailCard({ guardrail, highlighted }: GuardrailCardProps) {
         <button
           type="button"
           aria-pressed={guardrail.enabled}
-          disabled={update.isPending || locked}
+          disabled={update.isPending}
           onClick={() => update.mutate({ id: guardrail.id, changes: { enabled: !guardrail.enabled } })}
           className={smallButton}
         >
           {update.isPending ? 'Updating…' : guardrail.enabled ? 'Enabled' : 'Disabled'}
         </button>
-        {role === 'admin' && (
-          <button
-            type="button"
-            aria-pressed={mandatory}
-            disabled={update.isPending}
-            onClick={() => update.mutate({ id: guardrail.id, changes: { is_mandatory: !mandatory } })}
-            className={smallButton}
-          >
-            {update.isPending ? 'Updating…' : mandatory ? 'Remove mandatory' : 'Make mandatory'}
-          </button>
-        )}
+        <button
+          type="button"
+          aria-pressed={mandatory}
+          disabled={update.isPending}
+          onClick={() => update.mutate({ id: guardrail.id, changes: { is_mandatory: !mandatory } })}
+          className={smallButton}
+        >
+          {update.isPending ? 'Updating…' : mandatory ? 'Remove mandatory' : 'Make mandatory'}
+        </button>
         {!confirming && (
-          <button type="button" disabled={locked} onClick={() => setConfirming(true)} className={smallButton}>
+          <button type="button" onClick={() => setConfirming(true)} className={smallButton}>
             Delete
           </button>
         )}
@@ -98,9 +92,6 @@ export function GuardrailCard({ guardrail, highlighted }: GuardrailCardProps) {
             </button>
           </div>
         </div>
-      )}
-      {locked && (
-        <p className="m-0 text-[13px] text-muted">Only an admin can change or remove a mandatory guardrail.</p>
       )}
       {error && (
         <p role="alert" className="m-0 text-[13px] text-danger">

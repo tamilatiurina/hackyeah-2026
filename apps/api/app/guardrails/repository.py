@@ -1,34 +1,26 @@
-"""Where guardrails are stored: Supabase when configured, otherwise the in-memory store.
+"""Where guardrails are stored: each user's own library in Supabase.
 
-Routes only talk to `GuardrailRepository`, so they don't care which one is in use.
-
-- Supabase (SUPABASE_URL + SUPABASE_KEY set): queries run as the signed-in user, using the
-  access token the panel sends. The guardrail library is shared, so every signed-in user can
-  read and edit it (see the guardrails migrations). No token -> 401.
-- Otherwise (tests, local runs without Supabase): the seeded in-memory store.
+Queries run as the signed-in user (app.core.auth), so RLS shows and changes only their rows;
+owner_id is filled in by the database. Routes only talk to `GuardrailRepository`, so tests can
+swap in a fake.
 """
 
 from collections.abc import Callable
-from typing import Annotated, Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 import httpx
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, status
 from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
-from app.core.config import settings
-from app.core.supabase import get_supabase_for_user
+from app.core.auth import Me
 from app.guardrails.models import Guardrail
-from app.store import store
 from supabase import Client
 
 TABLE = "guardrails"
 _COLUMNS = "id,name,description,engine,stages,action,config,enabled,is_mandatory"
 
 T = TypeVar("T")
-
-_bearer = HTTPBearer(auto_error=False)
 
 
 class GuardrailRepository(Protocol):
@@ -41,25 +33,6 @@ class GuardrailRepository(Protocol):
     def replace(self, guardrail: Guardrail) -> None: ...
 
     def delete(self, guardrail_id: str) -> bool: ...
-
-
-class InMemoryGuardrailRepository:
-    """The seeded `store` from app.store (reset before each test)."""
-
-    def list(self) -> list[Guardrail]:
-        return list(store.guardrails.values())
-
-    def get(self, guardrail_id: str) -> Guardrail | None:
-        return store.guardrails.get(guardrail_id)
-
-    def add(self, guardrail: Guardrail) -> None:
-        store.guardrails[guardrail.id] = guardrail
-
-    def replace(self, guardrail: Guardrail) -> None:
-        store.guardrails[guardrail.id] = guardrail
-
-    def delete(self, guardrail_id: str) -> bool:
-        return store.guardrails.pop(guardrail_id, None) is not None
 
 
 def to_row(guardrail: Guardrail) -> dict[str, Any]:
@@ -134,20 +107,6 @@ class SupabaseGuardrailRepository:
         return bool(response.data)
 
 
-def supabase_configured() -> bool:
-    return bool(settings.SUPABASE_URL and settings.SUPABASE_KEY)
-
-
-def get_guardrail_repository(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-) -> GuardrailRepository:
-    """FastAPI dependency: the signed-in user's Supabase view, or memory without Supabase."""
-    if not supabase_configured():
-        return InMemoryGuardrailRepository()
-    if credentials is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "Sign in to use guardrails",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return SupabaseGuardrailRepository(get_supabase_for_user(credentials.credentials))
+def get_guardrail_repository(user: Me) -> GuardrailRepository:
+    """FastAPI dependency: the signed-in user's guardrails."""
+    return SupabaseGuardrailRepository(user.client)

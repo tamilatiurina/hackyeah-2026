@@ -6,14 +6,14 @@ import { renderApp } from '../../test/renderApp'
 
 async function openEdit(id = 'agent-support') {
   const user = userEvent.setup()
-  renderApp(`/agents/${id}`)
+  renderApp(`/agents/${id}/connection`)
   await user.click(await screen.findByRole('button', { name: 'Edit' }))
   return user
 }
 
 const save = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-describe('Edit agent', () => {
+describe('Edit agent connection', () => {
   it('opens with the current values and focus on Name', async () => {
     await openEdit()
     expect(screen.getByLabelText('Name')).toHaveValue('Support Assistant')
@@ -33,8 +33,9 @@ describe('Edit agent', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Support Bot' })).toBeInTheDocument()
     expect(fakeApi.lastAgentUpdate).toEqual({ name: 'Support Bot', base_url: 'https://support-v2.acme.example' })
     expect(
-      within(screen.getByRole('region', { name: 'Overview' })).getByText('https://support-v2.acme.example'),
+      within(screen.getByRole('region', { name: 'Connection' })).getByText('https://support-v2.acme.example'),
     ).toBeInTheDocument()
+    expect(screen.getAllByRole('status').find((el) => el.textContent)).toHaveTextContent('Saved. Config v2.')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus())
   })
 
@@ -53,7 +54,7 @@ describe('Edit agent', () => {
     expect(screen.getByLabelText('Header value')).toHaveAttribute('type', 'password')
     await user.type(screen.getByLabelText('Header value'), 'Bearer new')
     await save(user)
-    await screen.findByRole('region', { name: 'Overview' })
+    await screen.findByRole('region', { name: 'Connection' })
     expect(fakeApi.lastAgentUpdate).toEqual({ auth_header: { name: 'Authorization', value: 'Bearer new' } })
     expect(screen.queryByText(/Bearer new/)).not.toBeInTheDocument()
   })
@@ -62,7 +63,7 @@ describe('Edit agent', () => {
     const user = await openEdit()
     await user.click(screen.getByLabelText('Remove'))
     await save(user)
-    const overview = await screen.findByRole('region', { name: 'Overview' })
+    const overview = await screen.findByRole('region', { name: 'Connection' })
     expect(within(overview).getByText('None')).toBeInTheDocument()
     expect(fakeApi.lastAgentUpdate).toEqual({ auth_header: null })
   })
@@ -76,7 +77,7 @@ describe('Edit agent', () => {
     await user.type(screen.getByLabelText('Header name'), 'X-Api-Key')
     await user.type(screen.getByLabelText('Header value'), 'k')
     await save(user)
-    await screen.findByRole('region', { name: 'Overview' })
+    await screen.findByRole('region', { name: 'Connection' })
     expect(fakeApi.lastAgentUpdate).toEqual({ auth_header: { name: 'X-Api-Key', value: 'k' } })
   })
 
@@ -118,7 +119,7 @@ describe('Edit agent', () => {
   it('cancels and returns focus to Edit', async () => {
     const user = await openEdit()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('region', { name: 'Overview' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Connection' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus()
   })
 })

@@ -3,7 +3,6 @@ import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 import { setAccessTokenProvider, setUnauthorizedHandler } from '../api/client'
 import { resetFakeApi } from './fakeApi'
-import { resetFakePiPolicy } from './fakePiPolicy'
 import { server } from './server'
 
 // The first render in a file pays for module and MSW warm-up; under a parallel run that can
@@ -16,7 +15,6 @@ afterEach(() => {
   cleanup()
   server.resetHandlers()
   resetFakeApi()
-  resetFakePiPolicy()
   setAccessTokenProvider(() => null)
   setUnauthorizedHandler(null)
   vi.restoreAllMocks()

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { AuthClient, AuthSession } from './types'
+import type { AuthClient, AuthSession, OAuthProvider, SignUpResult } from './types'
 
 export const SESSION_EXPIRED = 'Your session expired. Sign in again.'
 
@@ -10,6 +10,11 @@ export interface AuthState {
   /** Why the user was signed out, shown on the sign-in page (e.g. SESSION_EXPIRED). */
   notice: string | null
   signIn(email: string, password: string): Promise<string | null>
+  /** Signs the new user in, unless Supabase first wants the email confirmed (confirmEmail). */
+  signUp(email: string, password: string): Promise<SignUpResult>
+  signInWithOAuth(provider: OAuthProvider): Promise<string | null>
+  sendPasswordReset(email: string): Promise<string | null>
+  updatePassword(password: string): Promise<string | null>
   signOut(): Promise<void>
   /** Realtime table subscriptions, or null when Supabase isn't configured or has no realtime. */
   watchTables: NonNullable<AuthClient['watchTables']> | null

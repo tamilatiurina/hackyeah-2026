@@ -1,24 +1,25 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { setAccessTokenProvider, setUnauthorizedHandler } from '../api/client'
+import { bootstrapAccount } from '../api/me'
 import { AuthContext, SESSION_EXPIRED, type AuthState } from './context'
-import type { AuthClient, AuthSession } from './types'
+import type { AuthClient, AuthSession, OAuthProvider } from './types'
 
 interface AuthProviderProps {
   client: AuthClient | null
   /** Skips the async session lookup (tests). */
   initialSession?: AuthSession | null
-  /** Without a session, start a Supabase anonymous (guest) session instead of asking to sign in. */
-  guest?: boolean
   children: ReactNode
 }
 
-export function AuthProvider({ client, initialSession, guest = false, children }: AuthProviderProps) {
+const NOT_CONFIGURED = 'Supabase is not configured'
+
+export function AuthProvider({ client, initialSession, children }: AuthProviderProps) {
   const queryClient = useQueryClient()
   const [session, setSessionState] = useState<AuthSession | null>(initialSession ?? null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [guestError, setGuestError] = useState<string | null>(null)
-  const guestPending = useRef(false)
+  // Users whose first-sign-in setup already ran in this tab.
+  const bootstrapped = useRef(new Set<string>())
   const [status, setStatus] = useState<'loading' | 'ready'>(
     !client || initialSession !== undefined ? 'ready' : 'loading',
   )
@@ -48,7 +49,7 @@ export function AuthProvider({ client, initialSession, guest = false, children }
     const unsubscribe = client.onAuthStateChange((next) => {
       // Signed out elsewhere (another tab, failed refresh) or a different user: drop their data.
       const previous = sessionRef.current
-      if (!next || (previous && previous.email !== next.email)) queryClient.clear()
+      if (!next || (previous && previous.userId !== next.userId)) queryClient.clear()
       setSession(next)
     })
     return () => {
@@ -57,18 +58,18 @@ export function AuthProvider({ client, initialSession, guest = false, children }
     }
   }, [client, initialSession, queryClient, setSession])
 
-  // Guest mode: whenever there is no session (first visit, expired guest), start a new guest session.
+  // First sign-in setup (seed library, demo agent): once per user per tab; the API does each step
+  // only once per account. When it added anything, refetch so the new rows show up.
+  const userId = session?.userId
   useEffect(() => {
-    if (!guest || !client || status !== 'ready' || session || guestError || guestPending.current) return
-    guestPending.current = true
-    setStatus('loading') // RequireAuth shows nothing meanwhile, so the sign-in page never flashes
-    void client.signInAnonymously().then(async (error) => {
-      if (error) setGuestError(error)
-      else setSession(await client.getSession())
-      guestPending.current = false
-      setStatus('ready')
-    })
-  }, [guest, client, status, session, guestError, setSession])
+    if (!client || !userId || bootstrapped.current.has(userId)) return
+    bootstrapped.current.add(userId)
+    bootstrapAccount()
+      .then((result) => {
+        if (result.library === 'seeded' || result.demo_agent === 'added') void queryClient.invalidateQueries()
+      })
+      .catch(() => bootstrapped.current.delete(userId)) // retried at the next sign-in or reload
+  }, [client, userId, queryClient])
 
   const signOut = useCallback(async () => {
     setSession(null)
@@ -97,7 +98,7 @@ export function AuthProvider({ client, initialSession, guest = false, children }
 
   const signIn = useCallback(
     async (email: string, password: string) => {
-      if (!client) return 'Supabase is not configured'
+      if (!client) return NOT_CONFIGURED
       const error = await client.signIn(email, password)
       if (!error) {
         setNotice(null)
@@ -108,17 +109,49 @@ export function AuthProvider({ client, initialSession, guest = false, children }
     [client, setSession],
   )
 
+  const signUp = useCallback(
+    async (email: string, password: string) => {
+      if (!client) return { error: NOT_CONFIGURED, confirmEmail: false }
+      const result = await client.signUp(email, password)
+      if (!result.error && !result.confirmEmail) {
+        setNotice(null)
+        setSession(await client.getSession())
+      }
+      return result
+    },
+    [client, setSession],
+  )
+
+  const signInWithOAuth = useCallback(
+    async (provider: OAuthProvider) => (client ? client.signInWithOAuth(provider) : NOT_CONFIGURED),
+    [client],
+  )
+
+  const sendPasswordReset = useCallback(
+    async (email: string) => (client ? client.sendPasswordReset(email) : NOT_CONFIGURED),
+    [client],
+  )
+
+  const updatePassword = useCallback(
+    async (password: string) => (client ? client.updatePassword(password) : NOT_CONFIGURED),
+    [client],
+  )
+
   const value = useMemo<AuthState>(
     () => ({
       status,
       session,
       configured: client !== null,
-      notice: notice ?? (guestError ? `Couldn't start a guest session: ${guestError}` : null),
+      notice,
       signIn,
+      signUp,
+      signInWithOAuth,
+      sendPasswordReset,
+      updatePassword,
       signOut,
       watchTables: client?.watchTables ?? null,
     }),
-    [status, session, client, notice, guestError, signIn, signOut],
+    [status, session, client, notice, signIn, signUp, signInWithOAuth, sendPasswordReset, updatePassword, signOut],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

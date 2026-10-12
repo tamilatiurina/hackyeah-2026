@@ -7,9 +7,12 @@ import { defineConfig, loadEnv } from 'vite'
 export default defineConfig(({ mode }) => {
   // Empty prefix loads unprefixed vars too (and the host's environment, e.g. on Vercel).
   const env = loadEnv(mode, process.cwd(), '')
+  // SUPABASE_KEY wins; otherwise use the publishable/anon key the Vercel Supabase integration syncs.
+  // Never fall back to SUPABASE_SERVICE_ROLE_KEY: this value is built into the browser bundle.
+  const supabaseKey = env.SUPABASE_KEY || env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || ''
   return {
     plugins: [react(), tailwindcss()],
-    // /a/ is the guarded A2A gateway (B-01), served at the API root like on Vercel (vercel.json).
+    // /a/ is the guarded A2A gateway (B-01), served at the API root like on Vercel (root vercel.json).
     server: {
       proxy: {
         '/api': env.API_URL || 'http://localhost:8000',
@@ -20,7 +23,7 @@ export default defineConfig(({ mode }) => {
     // the publishable/anon key. (A SUPABASE_ envPrefix would also ship e.g. the service-role key.)
     define: {
       'import.meta.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL ?? ''),
-      'import.meta.env.SUPABASE_KEY': JSON.stringify(env.SUPABASE_KEY ?? ''),
+      'import.meta.env.SUPABASE_KEY': JSON.stringify(supabaseKey),
     },
     test: {
       environment: 'jsdom',

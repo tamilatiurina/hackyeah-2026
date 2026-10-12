@@ -19,11 +19,12 @@ export interface AgentForm {
 export type AgentFormField = 'name' | 'description' | 'baseUrl' | 'authHeaderName' | 'authHeaderValue'
 export type AgentFormErrors = Partial<Record<AgentFormField, string>>
 
-/** Same limits as apps/api AgentRegistration. */
-export function validateAgentForm(form: AgentForm): AgentFormErrors {
+/** Same limits as apps/api AgentRegistration. Registering may leave the name blank (the API takes
+ * it from the Agent Card); editing may not. */
+export function validateAgentForm(form: AgentForm, { nameOptional = false } = {}): AgentFormErrors {
   const errors: AgentFormErrors = {}
   const name = form.name.trim()
-  if (!name) errors.name = 'Name is required'
+  if (!name && !nameOptional) errors.name = 'Name is required'
   else if (name.length > 100) errors.name = 'Use at most 100 characters'
   if (form.description.length > 1000) errors.description = 'Use at most 1,000 characters'
   const url = form.baseUrl.trim()

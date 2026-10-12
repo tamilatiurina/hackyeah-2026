@@ -4,24 +4,26 @@ import {
   Layout,
   LoadingRows,
   MemoryRouter,
-  ModeContext,
   PageHeader,
   PageShell,
-  RoleContext,
   Route,
   Routes,
   TableFrame,
   buttonPrimary,
+  pillClass,
 } from 'web'
 import type { ReactNode } from 'react'
 
-const noop = () => {}
 const auth = {
   status: 'ready' as const,
-  session: { accessToken: '', email: 'maria.kowalska@acme.dev', anonymous: false },
+  session: { accessToken: '', userId: 'preview-user', email: 'maria.kowalska@acme.dev' },
   configured: true,
   notice: null,
   signIn: async () => null,
+  signUp: async () => ({ error: null, confirmEmail: false }),
+  signInWithOAuth: async () => null,
+  sendPasswordReset: async () => null,
+  updatePassword: async () => null,
   signOut: async () => {},
   watchTables: null,
 }
@@ -30,15 +32,11 @@ function App({ path, page }: { path: string; page: ReactNode }) {
   return (
     <MemoryRouter initialEntries={[path]}>
       <AuthContext value={auth}>
-        <RoleContext value={{ role: 'admin', setRole: noop }}>
-          <ModeContext value={{ mode: 'panel', setMode: noop }}>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route path="*" element={page} />
-              </Route>
-            </Routes>
-          </ModeContext>
-        </RoleContext>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="*" element={page} />
+          </Route>
+        </Routes>
       </AuthContext>
     </MemoryRouter>
   )
@@ -46,9 +44,9 @@ function App({ path, page }: { path: string; page: ReactNode }) {
 
 const cell = 'px-5 py-4 align-middle'
 const AGENTS = [
-  ['support-triage-bot', 'Routes inbound tickets to the right queue.', 'https://triage.internal.acme.dev'],
-  ['invoice-reader', 'Extracts totals and due dates from PDFs.', 'https://invoices.internal.acme.dev'],
-  ['sales-research', 'Summarises accounts before a call.', 'https://research.internal.acme.dev'],
+  { name: 'Support Assistant', url: 'https://support-agent.acme.example', status: 'Live', live: true, guardrails: '2 attached · 1 mandatory', traffic: '3 sessions · 4 events', next: 'Open' },
+  { name: 'Contract Summarizer', url: 'https://legal-ai.acme.example/summarize', status: 'Setup · 3 of 5', live: false, guardrails: '1 attached · 1 mandatory', traffic: 'Not deployed', next: 'Run a test' },
+  { name: 'Invoice Reader', url: 'https://invoices.acme.example', status: 'Setup · 1 of 5', live: false, guardrails: '0 attached · 1 mandatory', traffic: 'Not deployed', next: 'Attach guardrails' },
 ]
 
 export const AgentsPage = () => (
@@ -58,7 +56,7 @@ export const AgentsPage = () => (
       <PageShell>
         <PageHeader
           title="Agents"
-          description="Proxy agents sit behind a guarded URL. Register one by its upstream URL; the hub checks it answers before saving."
+          description="Proxy agents sit behind a guarded URL. Open one to continue its setup or to see what its guardrails did."
           actions={
             <button type="button" className={buttonPrimary}>
               Register agent
@@ -66,22 +64,40 @@ export const AgentsPage = () => (
           }
         />
         <TableFrame label="Agents table">
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[560px] border-collapse text-left text-sm">
             <thead className="bg-[#F9F9F6]">
               <tr className="border-b border-line text-[11px] tracking-[0.08em] text-muted uppercase">
-                {['Agent', 'Description', 'Agent URL'].map((h) => (
+                {['Agent', 'Status', 'Guardrails', 'Traffic'].map((h) => (
                   <th key={h} scope="col" className="px-5 py-3.5 font-semibold">
                     {h}
                   </th>
                 ))}
+                <th scope="col" className="px-5 py-3.5 text-right font-semibold">
+                  Next step
+                </th>
               </tr>
             </thead>
             <tbody>
-              {AGENTS.map(([name, description, url]) => (
-                <tr key={name} className="border-b border-line last:border-b-0">
-                  <td className={`${cell} font-semibold`}>{name}</td>
-                  <td className={`${cell} text-muted`}>{description}</td>
-                  <td className={`${cell} font-mono text-[13px] text-muted`}>{url}</td>
+              {AGENTS.map((a) => (
+                <tr key={a.name} className="border-b border-line last:border-b-0">
+                  <td className={cell}>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-semibold">{a.name}</span>
+                      <span className="font-mono text-xs text-muted">{a.url}</span>
+                    </div>
+                  </td>
+                  <td className={cell}>
+                    <span className={`${pillClass} ${a.live ? 'bg-teal-soft text-teal-dark' : 'bg-warn-bg text-warn-fg'}`}>{a.status}</span>
+                  </td>
+                  <td className={`${cell} text-[13px] whitespace-nowrap`}>{a.guardrails}</td>
+                  <td className={`${cell} text-[13px] whitespace-nowrap text-muted`}>{a.traffic}</td>
+                  <td className={`${cell} text-right whitespace-nowrap`}>
+                    {a.live ? (
+                      <span className="inline-flex min-h-9 items-center rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium">Open</span>
+                    ) : (
+                      <span className="inline-flex min-h-9 items-center rounded-lg border border-teal/35 bg-teal-soft px-3 text-[13px] font-semibold text-teal-dark">{a.next}</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -6,9 +6,8 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { apiPath } from '../api/client'
 import { AppRoutes } from '../app/AppRoutes'
-import { RoleProvider } from '../app/RoleProvider'
-import { ModeProvider } from '../app/ModeProvider'
-import { DEMO_EMAIL, DEMO_PASSWORD, TEST_TOKEN } from '../test/fakeAuth'
+import { CONFIRM_EMAIL, DEMO_EMAIL, DEMO_PASSWORD, TAKEN_EMAIL, TEST_TOKEN } from '../test/fakeAuth'
+import { fakeApi } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { server } from '../test/server'
 import { AuthProvider } from './AuthProvider'
@@ -27,11 +26,7 @@ function renderUnconfigured() {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/sessions']}>
         <AuthProvider client={null}>
-          <RoleProvider>
-            <ModeProvider>
-              <AppRoutes />
-            </ModeProvider>
-          </RoleProvider>
+          <AppRoutes />
         </AuthProvider>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -41,16 +36,16 @@ function renderUnconfigured() {
 describe('sign-in', () => {
   it('sends signed-out visitors to /sign-in and back after signing in', async () => {
     const user = userEvent.setup()
-    renderApp('/guardrails', undefined, { signedIn: false })
+    renderApp('/guardrails', { signedIn: false })
     expect(location()).toBe('/sign-in')
-    expect(screen.getByRole('heading', { name: 'Sign in to Guardrail Hub' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to AgentsOnRails.dev' })).toBeInTheDocument()
     await signIn(user)
     await waitFor(() => expect(location()).toBe('/guardrails'))
   })
 
   it('shows the Supabase error for a wrong password', async () => {
     const user = userEvent.setup()
-    renderApp('/sessions', undefined, { signedIn: false })
+    renderApp('/sessions', { signedIn: false })
     await signIn(user, 'nope')
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid login credentials')
     expect(location()).toBe('/sign-in')
@@ -65,7 +60,7 @@ describe('sign-in', () => {
       }),
     )
     const user = userEvent.setup()
-    renderApp('/agents', undefined, { signedIn: false })
+    renderApp('/agents', { signedIn: false })
     await signIn(user)
     await screen.findByText('No agents yet. Register your first one.')
     expect(seen[0]).toBe(`Bearer ${TEST_TOKEN}`)
@@ -95,7 +90,7 @@ describe('sign-in', () => {
 
   it('redirects signed-in users away from /sign-in', () => {
     renderApp('/sign-in')
-    expect(location()).toBe('/sessions')
+    expect(location()).toBe('/agents')
   })
 
   it('tells production visitors the deployment lacks Supabase settings', () => {
@@ -115,11 +110,7 @@ describe('sign-in', () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/sessions']}>
           <AuthProvider client={null}>
-            <RoleProvider>
-              <ModeProvider>
-                <AppRoutes />
-              </ModeProvider>
-            </RoleProvider>
+            <AppRoutes />
           </AuthProvider>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -172,5 +163,118 @@ describe('sign-in', () => {
     await signIn(user)
     expect(await screen.findByText('No agents yet. Register your first one.')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Support Assistant' })).not.toBeInTheDocument()
+  })
+})
+
+describe('sign-up', () => {
+  it('creates an account and opens the app', async () => {
+    const user = userEvent.setup()
+    const { auth } = renderApp('/sign-up', { signedIn: false })
+    await user.type(screen.getByLabelText('Email'), 'new@example.com')
+    await user.type(screen.getByLabelText('Password'), 'long-enough')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    await waitFor(() => expect(location()).toBe('/agents'))
+    expect(auth.session?.email).toBe('new@example.com')
+  })
+
+  it('asks to confirm the email when Supabase requires it', async () => {
+    const user = userEvent.setup()
+    renderApp('/sign-up', { signedIn: false })
+    await user.type(screen.getByLabelText('Email'), CONFIRM_EMAIL)
+    await user.type(screen.getByLabelText('Password'), 'long-enough')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument()
+    expect(screen.getByText(CONFIRM_EMAIL)).toBeInTheDocument()
+    expect(location()).toBe('/sign-up')
+  })
+
+  it('shows the Supabase error and needs 8 characters', async () => {
+    const user = userEvent.setup()
+    renderApp('/sign-up', { signedIn: false })
+    await user.type(screen.getByLabelText('Email'), TAKEN_EMAIL)
+    await user.type(screen.getByLabelText('Password'), 'short')
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled()
+    await user.type(screen.getByLabelText('Password'), '-but-now-long')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('User already registered')
+  })
+
+  it('links sign-in and sign-up to each other', async () => {
+    const user = userEvent.setup()
+    renderApp('/sign-in', { signedIn: false })
+    await user.click(screen.getByRole('link', { name: 'Create one' }))
+    expect(location()).toBe('/sign-up')
+    await user.click(screen.getByRole('link', { name: 'Sign in' }))
+    expect(location()).toBe('/sign-in')
+  })
+})
+
+describe('GitHub and Google', () => {
+  it.each([
+    ['Continue with GitHub', 'github'],
+    ['Continue with Google', 'google'],
+  ] as const)('%s starts the %s sign-in', async (label, provider) => {
+    const user = userEvent.setup()
+    const { auth } = renderApp('/sign-in', { signedIn: false })
+    await user.click(screen.getByRole('button', { name: label }))
+    expect(auth.oauthStarted).toEqual([provider])
+    expect(screen.getByRole('button', { name: 'Redirecting…' })).toBeDisabled()
+  })
+
+  it('the callback opens the app once the session arrives', async () => {
+    const { auth } = renderApp('/auth/callback?code=abc', { signedIn: false })
+    act(() => auth.arriveAs('octocat@example.com'))
+    await waitFor(() => expect(location()).toBe('/agents'))
+  })
+
+  it('the callback explains a failed sign-in', () => {
+    renderApp('/auth/callback?error=access_denied&error_description=The+user+denied+access', { signedIn: false })
+    expect(screen.getByRole('heading', { name: "Couldn't sign you in" })).toBeInTheDocument()
+    expect(screen.getByText('The user denied access')).toBeInTheDocument()
+  })
+})
+
+describe('password reset', () => {
+  it('emails a reset link', async () => {
+    const user = userEvent.setup()
+    const { auth } = renderApp('/sign-in', { signedIn: false })
+    await user.click(screen.getByRole('link', { name: 'Forgot password?' }))
+    await user.type(screen.getByLabelText('Email'), DEMO_EMAIL)
+    await user.click(screen.getByRole('button', { name: 'Send reset link' }))
+    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument()
+    expect(auth.resetEmails).toEqual([DEMO_EMAIL])
+  })
+
+  it('sets a new password from the emailed link', async () => {
+    const user = userEvent.setup()
+    const { auth } = renderApp('/reset-password')
+    await user.type(screen.getByLabelText('New password'), 'brand-new-password')
+    await user.click(screen.getByRole('button', { name: 'Save password' }))
+    await waitFor(() => expect(location()).toBe('/agents'))
+    expect(auth.passwordUpdates).toEqual(['brand-new-password'])
+  })
+
+  it('explains an expired reset link', () => {
+    renderApp('/reset-password', { signedIn: false })
+    expect(screen.getByRole('heading', { name: 'Reset link expired' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Send a new one' })).toHaveAttribute('href', '/forgot-password')
+  })
+})
+
+describe('first sign-in setup', () => {
+  it('runs once per user and refetches what it added', async () => {
+    fakeApi.bootstrap = { library: 'seeded', demo_agent: 'added' }
+    const { queryClient } = renderApp('/agents')
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    await waitFor(() => expect(fakeApi.bootstrapCalls).toBe(1))
+    await waitFor(() => expect(invalidate).toHaveBeenCalled())
+  })
+
+  it('waits for a sign-in', async () => {
+    const user = userEvent.setup()
+    renderApp('/sign-in', { signedIn: false })
+    expect(fakeApi.bootstrapCalls).toBe(0)
+    await signIn(user)
+    await waitFor(() => expect(fakeApi.bootstrapCalls).toBe(1))
   })
 })

@@ -5,22 +5,33 @@ export function PageShell({ children, className = '' }: { children: ReactNode; c
   return <section className={`mx-auto flex w-full max-w-[1480px] flex-col gap-7 ${className}`}>{children}</section>
 }
 
-/** Page title row with optional description, meta line and right-aligned actions; ends in a bottom rule. */
+/** Page title row with optional badge beside the title, description, meta line and right-aligned
+ * actions; ends in a bottom rule. */
 export function PageHeader({
   title,
+  badge,
   description,
   actions,
   meta,
 }: {
   title: ReactNode
+  badge?: ReactNode
   description?: ReactNode
   actions?: ReactNode
   meta?: ReactNode
 }) {
+  const heading = <h1 className="m-0 text-[clamp(28px,3vw,32px)] font-semibold tracking-[-0.025em] break-words">{title}</h1>
   return (
     <header className="flex flex-wrap items-end justify-between gap-5 border-b border-line pb-6">
       <div className="flex min-w-0 max-w-3xl flex-col gap-1.5">
-        <h1 className="m-0 text-[clamp(28px,3vw,32px)] font-semibold tracking-[-0.025em] break-words">{title}</h1>
+        {badge ? (
+          <div className="flex flex-wrap items-center gap-3">
+            {heading}
+            {badge}
+          </div>
+        ) : (
+          heading
+        )}
         {description && <p className="m-0 max-w-[72ch] text-[15px] leading-6 text-muted">{description}</p>}
         {meta && <div className="mt-1 min-w-0 text-xs leading-5 text-muted">{meta}</div>}
       </div>

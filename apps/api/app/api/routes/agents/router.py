@@ -1,5 +1,6 @@
 import contextlib
-from typing import Annotated, Any
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
@@ -30,6 +31,9 @@ _PUBLIC_AGENT_COLUMNS = (
     "id,name,description,base_url,upstream_url,auth_header_name,agent_card,config_version"
 )
 _PUBLIC_FIELDS = set(_PUBLIC_AGENT_COLUMNS.split(","))
+# Read to work out the agent's setup progress; only the derived booleans are returned.
+_STATUS_COLUMNS = "gateway_key_hash,guardrails_reviewed_at,mcp_reviewed_at,tested_at"
+_READ_AGENT_COLUMNS = f"{_PUBLIC_AGENT_COLUMNS},{_STATUS_COLUMNS}"
 _MAX_CARD_BYTES = 256_000
 
 
@@ -125,7 +129,15 @@ def _database_row(
 
 
 def _public_agent(row: dict[str, JSON]) -> Agent:
-    return Agent.model_validate({k: v for k, v in row.items() if k in _PUBLIC_FIELDS})
+    return Agent.model_validate(
+        {
+            **{k: v for k, v in row.items() if k in _PUBLIC_FIELDS},
+            "has_gateway_key": row.get("gateway_key_hash") is not None,
+            "guardrails_reviewed": row.get("guardrails_reviewed_at") is not None,
+            "mcp_reviewed": row.get("mcp_reviewed_at") is not None,
+            "tested": row.get("tested_at") is not None,
+        }
+    )
 
 
 def _database_error() -> HTTPException:
@@ -152,12 +164,10 @@ def _agent_insert_error(error: APIError) -> HTTPException:
     )
 
 
-@router.post("", response_model=Agent, status_code=status.HTTP_201_CREATED)
-async def register_agent(
-    registration: AgentRegistration,
-    client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
-    database: Annotated[AgentDatabase, Depends(get_agent_database)],
+async def create_agent(
+    registration: AgentRegistration, client: httpx.AsyncClient, database: AgentDatabase
 ) -> Agent:
+    """Read the agent's Agent Card and save it as one of the signed-in user's agents."""
     agent_id = str(uuid4())
     headers = (
         {
@@ -182,6 +192,15 @@ async def register_agent(
     return _public_agent(row)
 
 
+@router.post("", response_model=Agent, status_code=status.HTTP_201_CREATED)
+async def register_agent(
+    registration: AgentRegistration,
+    client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
+    database: Annotated[AgentDatabase, Depends(get_agent_database)],
+) -> Agent:
+    return await create_agent(registration, client, database)
+
+
 @router.get("", response_model=AgentList)
 async def list_agents(
     database: Annotated[AgentDatabase, Depends(get_agent_database)],
@@ -190,12 +209,12 @@ async def list_agents(
         response = await run_in_threadpool(
             lambda: (
                 database.client.table("agents")
-                .select(_PUBLIC_AGENT_COLUMNS)
+                .select(_READ_AGENT_COLUMNS)
                 .order("created_at", desc=True)
                 .execute()
             )
         )
-        agents = [Agent.model_validate(row) for row in response.data]
+        agents = [_public_agent(row) for row in response.data]
     except (APIError, httpx.HTTPError, ValidationError) as error:
         raise _database_error() from error
     return AgentList(data=agents, total=len(agents))
@@ -210,7 +229,7 @@ async def get_agent(
         response = await run_in_threadpool(
             lambda: (
                 database.client.table("agents")
-                .select(_PUBLIC_AGENT_COLUMNS)
+                .select(_READ_AGENT_COLUMNS)
                 .eq("id", str(agent_id))
                 .limit(1)
                 .execute()
@@ -225,12 +244,12 @@ async def get_agent(
             detail="Agent not found",
         )
     try:
-        return Agent.model_validate(response.data[0])
+        return _public_agent(response.data[0])
     except ValidationError as error:
         raise _database_error() from error
 
 
-_SECRET_AGENT_COLUMNS = f"{_PUBLIC_AGENT_COLUMNS},auth_header_value"
+_SECRET_AGENT_COLUMNS = f"{_READ_AGENT_COLUMNS},auth_header_value"
 
 
 def _agent_not_found() -> HTTPException:
@@ -325,6 +344,33 @@ async def update_agent(
             status_code=status.HTTP_409_CONFLICT,
             detail="The agent was changed by someone else; reload and try again",
         )
+    return _public_agent(result.data[0])
+
+
+_SETUP_COLUMNS = {"guardrails": "guardrails_reviewed_at", "mcp": "mcp_reviewed_at"}
+
+
+@router.post("/{agent_id}/setup/{step}", response_model=Agent)
+async def complete_setup_step(
+    agent_id: UUID,
+    step: Literal["guardrails", "mcp"],
+    database: Annotated[AgentDatabase, Depends(get_agent_database)],
+) -> Agent:
+    """Mark a setup step done without attaching anything (guardrails) or after skipping it (MCP).
+
+    This is progress, not configuration, so `config_version` stays the same.
+    """
+    stamp: dict[str, JSON] = {_SETUP_COLUMNS[step]: datetime.now(UTC).isoformat()}
+    try:
+        result = await run_in_threadpool(
+            lambda: database.client.table("agents").update(stamp).eq("id", str(agent_id)).execute()
+        )
+    except (APIError, httpx.HTTPError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not save agent"
+        ) from error
+    if not result.data:
+        raise _agent_not_found()  # missing, or not owned by the caller (row level security)
     return _public_agent(result.data[0])
 
 

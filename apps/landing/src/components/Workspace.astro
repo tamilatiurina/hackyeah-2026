@@ -1,0 +1,43 @@
+---
+const points: { title: string; body: string }[] = [
+  {
+    title: 'Sign up in a minute',
+    body: 'Use your email, GitHub or Google. Nobody shares a login, and there are no guest sessions.',
+  },
+  {
+    title: 'Everything is yours alone',
+    body: 'Agents, guardrails, MCP servers, signatures, sessions and the audit log belong to your account. Other users never see them.',
+  },
+  {
+    title: 'A demo agent from the start',
+    body: 'Every new account gets the demo support agent and a starter set of guardrails, so the first test chat takes one click.',
+  },
+]
+---
+
+<section id="workspace" class="border-t border-line bg-surface">
+  <div class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+    <div class="grid gap-12 lg:grid-cols-[1fr_1.6fr] lg:gap-16">
+      <div class="max-w-md">
+        <h2 class="text-3xl leading-tight font-semibold tracking-tight text-balance">
+          Your own private workspace.
+        </h2>
+        <p class="mt-5 leading-relaxed text-muted">
+          Every account is separate, down to the database: each record carries its owner, and
+          row-level security only ever returns your own.
+        </p>
+      </div>
+
+      <ul class="m-0 grid list-none gap-6 p-0 sm:grid-cols-3 lg:grid-cols-1">
+        {
+          points.map((p) => (
+            <li class="border-l-2 border-teal pl-4">
+              <h3 class="text-base font-semibold">{p.title}</h3>
+              <p class="mt-1.5 leading-relaxed text-muted">{p.body}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </div>
+</section>

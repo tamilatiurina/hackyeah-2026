@@ -1,6 +1,6 @@
-# Guardrail Hub UI conventions
+# AgentsOnRails.dev UI conventions
 
-Guardrail Hub is a control room for AI agents: calm, dense, operational. Off-white canvas, white surfaces with hairline borders, one teal accent, a near-black sidebar. IBM Plex Sans for text, IBM Plex Mono for URLs, ids and code.
+AgentsOnRails.dev is a control room for AI agents: calm, dense, operational. Off-white canvas, white surfaces with hairline borders, one teal accent, a near-black sidebar. IBM Plex Sans for text, IBM Plex Mono for URLs, ids and code.
 
 ## Styling idiom: Tailwind utilities on brand tokens
 
@@ -27,7 +27,7 @@ Rhythm: pages stack sections with `gap-7` (PageShell does this); cards use `p-5`
 Buttons, inputs and badges are plain elements styled with exported class strings. Use them instead of inventing button styles:
 
 ```jsx
-const { buttonPrimary, buttonSecondary, inputClass, badgeClass, pillClass } = window.GuardrailHub
+const { buttonPrimary, buttonSecondary, inputClass, badgeClass, pillClass } = window.AgentsOnRails
 <button className={buttonPrimary}>Register agent</button>
 <button className={buttonSecondary}>Cancel</button>
 <input className={inputClass} aria-invalid={false} />
@@ -37,10 +37,10 @@ const { buttonPrimary, buttonSecondary, inputClass, badgeClass, pillClass } = wi
 
 ## Page anatomy
 
-Every page is `PageShell` > `PageHeader` > content. Lists show `LoadingRows` while loading, `EmptyState` when empty, and a `<table>` inside `TableFrame` otherwise. `LiveBadge` goes in `PageHeader` `actions` for pages with live updates.
+Every page is `PageShell` > `PageHeader` > content. Lists show `LoadingRows` while loading, `EmptyState` when empty, and a `<table>` inside `TableFrame` otherwise. `LiveBadge` goes in `PageHeader` `actions` for pages with live updates. A status pill beside the title goes in `PageHeader` `badge` (agents: `bg-warn-bg text-warn-fg` "Setup · 2 of 5" until live, then `bg-teal-soft text-teal-dark` "Live"). Inside `Layout`, `useToast()` returns a function that shows a short top-right confirmation (e.g. `toast('Guarded URL copied.')`).
 
 ```jsx
-const { PageShell, PageHeader, TableFrame, buttonPrimary } = window.GuardrailHub
+const { PageShell, PageHeader, TableFrame, buttonPrimary } = window.AgentsOnRails
 <div className="bg-canvas p-6">
   <PageShell>
     <PageHeader title="Agents" description="Proxy agents sit behind a guarded URL."
@@ -54,25 +54,23 @@ const { PageShell, PageHeader, TableFrame, buttonPrimary } = window.GuardrailHub
 
 ## App shell setup
 
-`Sidebar` and `Layout` read a router and three contexts, and throw without them. `Layout` renders the routed page through `<Outlet>`, so use it as a parent route. Wrap like this (all exported from the bundle, react-router included):
+`Sidebar` and `Layout` read a router and the auth context, and throw without them. `Layout` renders the routed page through `<Outlet>`, so use it as a parent route. Wrap like this (all exported from the bundle, react-router included):
 
 ```jsx
-const { MemoryRouter, Routes, Route, AuthContext, RoleContext, ModeContext, Layout } = window.GuardrailHub
+const { MemoryRouter, Routes, Route, AuthContext, Layout } = window.AgentsOnRails
 const auth = { status: 'ready', configured: true, notice: null, watchTables: null,
-  session: { accessToken: '', email: 'maria@acme.dev', anonymous: false },
-  signIn: async () => null, signOut: async () => {} }
+  session: { accessToken: '', userId: 'preview-user', email: 'maria@acme.dev' },
+  signIn: async () => null, signUp: async () => ({ error: null, confirmEmail: false }),
+  signInWithOAuth: async () => null, sendPasswordReset: async () => null,
+  updatePassword: async () => null, signOut: async () => {} }
 <MemoryRouter initialEntries={['/agents']}>
   <AuthContext value={auth}>
-    <RoleContext value={{ role: 'admin', setRole: () => {} }}>
-      <ModeContext value={{ mode: 'panel', setMode: () => {} }}>
-        <Routes><Route element={<Layout />}><Route path="*" element={<YourPage />} /></Route></Routes>
-      </ModeContext>
-    </RoleContext>
+    <Routes><Route element={<Layout />}><Route path="*" element={<YourPage />} /></Route></Routes>
   </AuthContext>
 </MemoryRouter>
 ```
 
-`mode` is `'panel'` (Agent Wrapped nav: Sessions, Agents, Guardrails, Audit log, MCP servers, Test chat, Security) or `'agent'` (Agent Integrated nav: Playground, Policies, Incidents, Sessions). `role` is `'admin' | 'dev' | 'tester'`. The nav highlights the link matching the router path. `Brand` has white text: only place it on `bg-sidebar` inside an `on-dark` wrapper.
+The nav is Agents, then a Library section (Guardrails, MCP servers) and a Monitor section (Sessions, Audit log, Security). There are no roles: every signed-in user manages their own workspace. The nav highlights the link matching the router path. `Brand` has white text: only place it on `bg-sidebar` inside an `on-dark` wrapper.
 
 ## Where the truth lives
 

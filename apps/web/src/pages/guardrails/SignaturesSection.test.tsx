@@ -6,21 +6,21 @@ import { renderApp } from '../../test/renderApp'
 
 const section = () => screen.getByRole('region', { name: 'Injection signatures' })
 
-async function open(role: 'admin' | 'dev' = 'admin') {
+async function open() {
   const user = userEvent.setup()
-  renderApp('/guardrails', role)
+  renderApp('/guardrails')
   await within(await screen.findByRole('region', { name: 'Injection signatures' })).findByText('ignore-instructions')
   return user
 }
 
 describe('Injection signatures', () => {
-  it('lists the company signatures', async () => {
+  it('lists your signatures', async () => {
     await open()
     expect(within(section()).getByText('reveal-prompt')).toBeInTheDocument()
     expect(within(section()).getByText(/\(reveal\|print\|repeat\)/)).toBeInTheDocument()
   })
 
-  it('lets admins add a signature', async () => {
+  it('adds a signature', async () => {
     const user = await open()
     await user.click(within(section()).getByRole('button', { name: 'Add signature' }))
     await user.type(screen.getByLabelText('Signature id'), 'pirate-speak')
@@ -40,7 +40,7 @@ describe('Injection signatures', () => {
     expect(await within(section()).findByText('A signature with this id already exists')).toBeInTheDocument()
   })
 
-  it('lets admins delete a signature', async () => {
+  it('deletes a signature', async () => {
     const user = await open()
     await user.click(within(section()).getByRole('button', { name: 'Delete ignore-instructions' }))
     expect(within(section()).getByText('Delete ignore-instructions?')).toBeInTheDocument()
@@ -53,14 +53,8 @@ describe('Injection signatures', () => {
 
   it('shows an empty state when no signatures are configured', async () => {
     fakeApi.signatures = []
-    renderApp('/guardrails', 'admin')
+    renderApp('/guardrails')
     expect(await within(section()).findByText('No injection signatures')).toBeInTheDocument()
-    expect(within(section()).getByText('No company-wide signatures are configured.')).toBeInTheDocument()
-  })
-
-  it('is read-only for developers', async () => {
-    await open('dev')
-    expect(within(section()).getByText('Read-only for developers')).toBeInTheDocument()
-    expect(within(section()).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(section()).getByText('Add a pattern for the prompt injection guardrail to match.')).toBeInTheDocument()
   })
 })

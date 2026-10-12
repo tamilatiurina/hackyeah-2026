@@ -102,22 +102,13 @@ describe('Test chat', () => {
     expect(fakeApi.testChatRequests[1].params.message.parts).toEqual([{ text: '#error' }])
   })
 
-  it('simulates the guarded agent while the test chat endpoint does not exist yet', async () => {
+  it('shows an error when the test chat endpoint is missing, without making up a reply', async () => {
     fakeApi.testChatSupported = false
     const user = await open()
     await user.click(screen.getByRole('button', { name: '#pii' }))
-    expect(await screen.findByText(/Simulated: the test chat endpoint \(B-06\) isn't on this API yet/)).toBeInTheDocument()
-    await waitFor(() => expect(lastReply().getByText('Redacted')).toBeInTheDocument())
-    expect(lastReply().getByText('Reach me at [EMAIL] or [PHONE].')).toBeInTheDocument()
-    expect(lastReply().getByText('Simulated')).toBeInTheDocument()
-    expect(lastReply().queryByRole('button', { name: /Flag reply/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '#inject' })).toBeEnabled()
-
-    await user.click(screen.getByRole('button', { name: '#inject' }))
-    await waitFor(() => expect(lastReply().getByText('Blocked')).toBeInTheDocument())
-    expect(fakeApi.testChatRequests).toEqual([]) // the API never answered: all simulated
-    const trace = within(screen.getByRole('region', { name: 'Trace' }))
-    expect(trace.getAllByText('Simulated').length).toBeGreaterThan(0)
+    expect(await lastReply().findByText(/Not Found|404|failed/i)).toBeInTheDocument()
+    expect(screen.queryByText('Simulated')).not.toBeInTheDocument()
+    expect(lastReply().queryByText('Redacted')).not.toBeInTheDocument()
   })
 
   it('reveals the trace when a reply is inspected', async () => {
@@ -134,12 +125,6 @@ describe('Test chat', () => {
     renderApp('/test')
     expect(await screen.findByText('Register an agent first.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Go to Agents' })).toHaveAttribute('href', '/agents')
-  })
-
-  it('is the only screen testers see', async () => {
-    renderApp('/agents', 'tester')
-    expect(await screen.findByRole('heading', { level: 1, name: 'Test chat' })).toBeInTheDocument()
-    expect(screen.getByTestId('location').textContent).toBe('/test')
   })
 
   it('announces the reply to screen readers', async () => {

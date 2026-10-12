@@ -111,7 +111,7 @@ async def call_unguarded(client: httpx.AsyncClient, target: UpstreamTarget, text
 
 
 def _hub_metadata(result: a2a.Json) -> a2a.Json:
-    """metadata.guardrailHub on the reply message or task ({} when absent)."""
+    """metadata.agentsOnRails on the reply message or task ({} when absent)."""
     for holder in (result.get("message"), result.get("task")):
         if isinstance(holder, dict):
             hub = (holder.get("metadata") or {}).get(a2a.METADATA_KEY)
@@ -185,8 +185,8 @@ async def run_scan(
     engine: GuardrailEngine,
     client: httpx.AsyncClient,
     judge: Judge | None,
-    role: str | None,
     canary: str,
+    role: str | None = None,
     probes: list[Probe] = PROBES,
     budget_seconds: float = SCAN_BUDGET_SECONDS,
 ) -> AsyncIterator[ProbeResult]:

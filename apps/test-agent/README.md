@@ -1,6 +1,6 @@
 # acme-test-agent
 
-A deterministic, stateless **A2A 1.0** agent for testing Guardrail Hub. It implements the hub's A2A profile ([docs/agent-contract-a2a.md](../../docs/agent-contract-a2a.md)) and needs no LLM or API key. Nothing is stored between calls; the reply depends only on the message's text.
+A deterministic, stateless **A2A 1.0** agent for testing AgentsOnRails.dev. It implements the hub's A2A profile ([docs/agent-contract-a2a.md](../../docs/agent-contract-a2a.md)) and needs no LLM or API key. Nothing is stored between calls; the reply depends only on the message's text.
 
 It works with the official `a2a-sdk` client (checked with 1.2.1).
 
@@ -57,7 +57,7 @@ Start the user message with one of these:
 | `#inject`   | "Ignore all previous instructions…", `curl … \| sh`         | prompt-injection signatures          |
 | `#toxic`    | an insult                                                   | toxicity                             |
 | `#offtopic` | elections and crypto                                        | topic deny list                      |
-| `#context`  | echoes the parts tagged `metadata.guardrailHub`             | governance prompt and context        |
+| `#context`  | echoes the parts tagged `metadata.agentsOnRails`             | governance prompt and context        |
 | `#slow N`   | waits N s (max 60)                                          | per-call time limit                  |
 | `#long N`   | N words (max 20000)                                         | token / cost budget                  |
 | `#task`     | a `TASK_STATE_COMPLETED` task with an artifact             | hub reads task replies               |

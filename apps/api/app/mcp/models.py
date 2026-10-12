@@ -134,7 +134,7 @@ class AgentMcpServer(BaseModel):
 
 
 class McpGrant(BaseModel):
-    """What the agent is told on each call (A2A params.metadata.guardrailHub.mcpServers).
+    """What the agent is told on each call (A2A params.metadata.agentsOnRails.mcpServers).
     Never credentials: the hub keeps them."""
 
     id: str

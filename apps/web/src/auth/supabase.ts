@@ -5,18 +5,22 @@ function toSession(session: Session | null): AuthSession | null {
   return session
     ? {
         accessToken: session.access_token,
+        userId: session.user.id,
         email: session.user.email ?? '',
-        anonymous: session.user.is_anonymous ?? false,
       }
     : null
 }
+
+/** Where Supabase sends the browser back to after OAuth and email links (same origin). */
+const redirectTo = (path: string) => `${window.location.origin}${path}`
 
 /** Null when SUPABASE_URL / SUPABASE_KEY were not set at build time. */
 export function createAuthClient(): AuthClient | null {
   const url = import.meta.env.SUPABASE_URL
   const key = import.meta.env.SUPABASE_KEY
   if (!url || !key) return null
-  const supabase = createClient(url, key)
+  // PKCE: OAuth and email links come back with a ?code= that the client exchanges on load.
+  const supabase = createClient(url, key, { auth: { flowType: 'pkce', detectSessionInUrl: true } })
   const { auth } = supabase
   return {
     async getSession() {
@@ -35,8 +39,30 @@ export function createAuthClient(): AuthClient | null {
       const { error } = await auth.signInWithPassword({ email, password })
       return error ? error.message : null
     },
-    async signInAnonymously() {
-      const { error } = await auth.signInAnonymously()
+    async signUp(email, password) {
+      const { data, error } = await auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectTo('/auth/callback') },
+      })
+      // With email confirmation on, Supabase creates the user but starts no session yet.
+      return { error: error ? error.message : null, confirmEmail: !error && !data.session }
+    },
+    async signInWithOAuth(provider) {
+      const { error } = await auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: redirectTo('/auth/callback') },
+      })
+      return error ? error.message : null
+    },
+    async sendPasswordReset(email) {
+      const { error } = await auth.resetPasswordForEmail(email, {
+        redirectTo: redirectTo('/reset-password'),
+      })
+      return error ? error.message : null
+    },
+    async updatePassword(password) {
+      const { error } = await auth.updateUser({ password })
       return error ? error.message : null
     },
     watchTables(tables, onChange, onStatus) {

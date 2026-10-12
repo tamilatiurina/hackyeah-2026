@@ -1,9 +1,10 @@
+import type { Bootstrap } from '../api/me'
 // Test double for the real guardrail and signature endpoints in apps/api: same paths, shapes and
 // error format ({detail}). The browser never uses it — MSW bypasses these paths to the real API.
 import { http, HttpResponse } from 'msw'
 import type { SendMessageRequest } from '../api/a2a'
 import { apiPath } from '../api/client'
-import { simulateTestChat } from '../api/testChatSimulator'
+import { simulateTestChat } from './testChatSimulator'
 import type {
   Agent,
   AgentCard,
@@ -209,6 +210,14 @@ function effectiveFor(agentId: string): EffectiveGuardrail[] {
   return [...mandatory, ...bound]
 }
 
+/** Changes an agent's stored fields; returns the new agent. Setup progress never bumps the version. */
+function patchAgent(id: string, changes: Partial<Agent>): Agent | undefined {
+  const index = fakeApi.agents.findIndex((a) => a.id === id)
+  if (index === -1) return undefined
+  fakeApi.agents[index] = { ...fakeApi.agents[index], ...changes }
+  return fakeApi.agents[index]
+}
+
 export const cardUnreachable = (baseUrl: string) =>
   `Could not fetch the agent's A2A Agent Card from ${baseUrl.replace(/\/$/, '')}/.well-known/agent-card.json`
 
@@ -231,6 +240,8 @@ export const fakeApi: {
   flags: unknown[]
   gatewayKeys: Record<string, string>
   gatewayKeyCount: number
+  /** POST /agents/{id}/setup/{step} calls, in order. */
+  setupSteps: { agentId: string; step: string }[]
   mcpServers: McpServer[]
   lastMcpServerCreate: McpServerCreate | null
   lastMcpServerUpdate: McpServerUpdate | null
@@ -243,6 +254,9 @@ export const fakeApi: {
   auditSupported: boolean
   auditPageSize: number
   auditRequests: URL[]
+  /** POST /me/bootstrap calls, and what the next one answers. */
+  bootstrapCalls: number
+  bootstrap: Bootstrap
 } = {
   guardrails: seedGuardrails(),
   signatures: seedSignatures(),
@@ -258,6 +272,7 @@ export const fakeApi: {
   flags: [],
   gatewayKeys: {},
   gatewayKeyCount: 0,
+  setupSteps: [],
   mcpServers: seedMcpServers(),
   lastMcpServerCreate: null,
   lastMcpServerUpdate: null,
@@ -272,9 +287,13 @@ export const fakeApi: {
   bindingsSupported: true,
   bindingRequests: [],
   bindingId: 1,
+  bootstrapCalls: 0,
+  bootstrap: { library: 'already_seeded', demo_agent: 'already_added' },
 }
 
 export function resetFakeApi(): void {
+  fakeApi.bootstrapCalls = 0
+  fakeApi.bootstrap = { library: 'already_seeded', demo_agent: 'already_added' }
   fakeApi.guardrails = seedGuardrails()
   fakeApi.signatures = seedSignatures()
   fakeApi.nextId = 1
@@ -293,6 +312,7 @@ export function resetFakeApi(): void {
   fakeApi.flags = []
   fakeApi.gatewayKeys = {}
   fakeApi.gatewayKeyCount = 0
+  fakeApi.setupSteps = []
   fakeApi.mcpServers = seedMcpServers()
   fakeApi.lastMcpServerCreate = null
   fakeApi.lastMcpServerUpdate = null
@@ -347,8 +367,6 @@ function fakeDryRun(body: DryRunRequest): DryRunResult {
   }
 }
 
-const isAdmin = (request: Request) => request.headers.get('X-Role') === 'admin'
-
 function page<T>(rows: T[], params: URLSearchParams): { data: T[]; next_cursor: string | null } {
   const start = Number(params.get('before') ?? 0)
   const size = Number(params.get('limit')) || fakeApi.auditPageSize
@@ -357,6 +375,11 @@ function page<T>(rows: T[], params: URLSearchParams): { data: T[]; next_cursor: 
 }
 
 export const fakeApiHandlers = [
+  http.post(apiPath('/me/bootstrap'), () => {
+    fakeApi.bootstrapCalls += 1
+    return HttpResponse.json(fakeApi.bootstrap)
+  }),
+
   http.get(apiPath('/guardrail-templates'), () => HttpResponse.json(FAKE_TEMPLATES)),
   http.get(apiPath('/guardrails'), () => HttpResponse.json(fakeApi.guardrails)),
 
@@ -394,7 +417,6 @@ export const fakeApiHandlers = [
   http.get(apiPath('/injection-signatures'), () => HttpResponse.json(fakeApi.signatures)),
 
   http.post(apiPath('/injection-signatures'), async ({ request }) => {
-    if (!isAdmin(request)) return detail(403, 'Only admins can change injection signatures')
     const body = (await request.json()) as InjectionSignature
     if (!/^[a-z0-9][a-z0-9-]*$/.test(body.id)) {
       return validation("String should match pattern '^[a-z0-9][a-z0-9-]*$'", ['body', 'id'])
@@ -404,8 +426,7 @@ export const fakeApiHandlers = [
     return HttpResponse.json(body, { status: 201 })
   }),
 
-  http.delete(apiPath('/injection-signatures/:id'), ({ request, params }) => {
-    if (!isAdmin(request)) return detail(403, 'Only admins can change injection signatures')
+  http.delete(apiPath('/injection-signatures/:id'), ({ params }) => {
     if (!fakeApi.signatures.some((s) => s.id === params.id)) return detail(404, 'Signature not found')
     fakeApi.signatures = fakeApi.signatures.filter((s) => s.id !== params.id)
     return new HttpResponse(null, { status: 204 })
@@ -605,10 +626,30 @@ export const fakeApiHandlers = [
     if (!fakeApi.agents.some((a) => a.id === id)) return detail(404, 'Agent not found')
     const key = `ghk_test_${++fakeApi.gatewayKeyCount}`
     fakeApi.gatewayKeys[id] = key
+    patchAgent(id, { has_gateway_key: true })
     return HttpResponse.json(
       { agent_id: id, key, gateway_path: `/a/${id}`, agent_card_path: `/a/${id}/.well-known/agent-card.json` },
       { status: 201 },
     )
+  }),
+
+  http.delete(apiPath('/agents/:id/gateway-key'), ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    const id = String(params.id)
+    if (!fakeApi.agents.some((a) => a.id === id)) return detail(404, 'Agent not found')
+    delete fakeApi.gatewayKeys[id]
+    patchAgent(id, { has_gateway_key: false })
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post(apiPath('/agents/:id/setup/:step'), ({ request, params }) => {
+    if (!signedIn(request)) return notAuthenticated()
+    const id = String(params.id)
+    const step = String(params.step)
+    if (step !== 'guardrails' && step !== 'mcp') return validation("Input should be 'guardrails' or 'mcp'", ['path', 'step'])
+    if (!fakeApi.agents.some((a) => a.id === id)) return detail(404, 'Agent not found')
+    fakeApi.setupSteps.push({ agentId: id, step })
+    return HttpResponse.json(patchAgent(id, step === 'guardrails' ? { guardrails_reviewed: true } : { mcp_reviewed: true }))
   }),
 
   http.post(apiPath('/agents/:id/test-chat'), async ({ request, params }) => {
@@ -617,6 +658,7 @@ export const fakeApiHandlers = [
     if (!fakeApi.agents.some((a) => a.id === params.id)) return detail(404, 'Agent not found')
     const body = (await request.json()) as SendMessageRequest
     fakeApi.testChatRequests.push(body)
+    patchAgent(String(params.id), { tested: true })
     return HttpResponse.json(simulateTestChat(body, { serial: fakeApi.testChatRequests.length }))
   }),
 

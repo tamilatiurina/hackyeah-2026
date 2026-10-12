@@ -53,7 +53,7 @@ describe('Live updates (#102)', () => {
   })
 
   it('works as before without realtime', async () => {
-    renderApp('/audit', undefined, { realtime: false })
+    renderApp('/audit', { realtime: false })
     await screen.findByRole('region', { name: 'Audit events table' })
     expect(screen.queryByText('Live')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()

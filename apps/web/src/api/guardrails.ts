@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRole } from '../app/role'
 import { deleteJson, getJson, patchJson, postJson } from './client'
 import type {
   DryRunRequest,
@@ -33,9 +32,8 @@ export function useGuardrails() {
 
 export function useCreateGuardrail() {
   const queryClient = useQueryClient()
-  const { role } = useRole()
   return useMutation({
-    mutationFn: (body: GuardrailCreate) => postJson<Guardrail>('/guardrails', body, { 'X-Role': role }),
+    mutationFn: (body: GuardrailCreate) => postJson<Guardrail>('/guardrails', body),
     onSuccess: (created) => {
       queryClient.setQueryData<Guardrail[]>(guardrailKeys.guardrails, (old) => [...(old ?? []), created])
       void queryClient.invalidateQueries({ queryKey: guardrailKeys.guardrails })
@@ -45,10 +43,9 @@ export function useCreateGuardrail() {
 
 export function useUpdateGuardrail() {
   const queryClient = useQueryClient()
-  const { role } = useRole()
   return useMutation({
     mutationFn: ({ id, changes }: { id: string; changes: GuardrailUpdate }) =>
-      patchJson<Guardrail>(`/guardrails/${enc(id)}`, changes, { 'X-Role': role }),
+      patchJson<Guardrail>(`/guardrails/${enc(id)}`, changes),
     onSuccess: (updated) => {
       queryClient.setQueryData<Guardrail[]>(guardrailKeys.guardrails, (old) =>
         (old ?? []).map((g) => (g.id === updated.id ? updated : g)),
@@ -60,9 +57,8 @@ export function useUpdateGuardrail() {
 
 export function useDeleteGuardrail() {
   const queryClient = useQueryClient()
-  const { role } = useRole()
   return useMutation({
-    mutationFn: (id: string) => deleteJson(`/guardrails/${enc(id)}`, { 'X-Role': role }),
+    mutationFn: (id: string) => deleteJson(`/guardrails/${enc(id)}`),
     onSuccess: (_, id) => {
       queryClient.setQueryData<Guardrail[]>(guardrailKeys.guardrails, (old) => (old ?? []).filter((g) => g.id !== id))
       void queryClient.invalidateQueries({ queryKey: guardrailKeys.guardrails })
@@ -83,10 +79,9 @@ export function useSignatures() {
 
 export function useAddSignature() {
   const queryClient = useQueryClient()
-  const { role } = useRole()
   return useMutation({
     mutationFn: (signature: InjectionSignature) =>
-      postJson<InjectionSignature>('/injection-signatures', signature, { 'X-Role': role }),
+      postJson<InjectionSignature>('/injection-signatures', signature),
     onSuccess: (added) => {
       queryClient.setQueryData<InjectionSignature[]>(guardrailKeys.signatures, (old) => [...(old ?? []), added])
       void queryClient.invalidateQueries({ queryKey: guardrailKeys.signatures })
@@ -96,9 +91,8 @@ export function useAddSignature() {
 
 export function useDeleteSignature() {
   const queryClient = useQueryClient()
-  const { role } = useRole()
   return useMutation({
-    mutationFn: (id: string) => deleteJson(`/injection-signatures/${enc(id)}`, { 'X-Role': role }),
+    mutationFn: (id: string) => deleteJson(`/injection-signatures/${enc(id)}`),
     onSuccess: (_, id) => {
       queryClient.setQueryData<InjectionSignature[]>(guardrailKeys.signatures, (old) =>
         (old ?? []).filter((s) => s.id !== id),

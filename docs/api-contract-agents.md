@@ -36,8 +36,12 @@ interface AgentUpdate {              // PATCH body; every field optional
 | `PATCH /agents/{id}` | 200 `Agent`; `config_version` + 1 only when something actually changed | 404 (also for another owner's agent); 409 when the agent was edited meanwhile (the write is guarded on the version read); 409 "An agent with this name already exists"; 422 validation; 502 when a changed `base_url` has no readable A2A 1.0 Agent Card (the detail says why) |
 | `DELETE /agents/{id}` (also removes the agent's bindings) | 204 | 404 |
 
-Only the owner can edit or delete an agent (row level security); anyone else gets 404. Admin override of other
-people's agents is not built yet. The version is a counter only; there is no history table (FR-09 would need one).
+Every row belongs to one user: only the owner can read, edit or delete an agent (row level security); anyone
+else gets 404. Every `/api/v1` route needs `Authorization: Bearer <Supabase access token>` (401 without one).
+The version is a counter only; there is no history table (FR-09 would need one).
+
+`POST /me/bootstrap` runs the first-sign-in setup once per account and answers what it did:
+`{"library": "seeded" | "already_seeded", "demo_agent": "added" | "already_added" | "unavailable"}`.
 
 ## B-06: test chat — proposed
 
@@ -63,11 +67,11 @@ Request: a JSON-RPC 2.0 `SendMessage`, exactly as a client would send to the gua
 
 Response: the guarded pipeline's JSON-RPC response: `result.message` (passed, redacted or warned)
 or `result.task` (a `TASK_STATE_REJECTED` refusal when blocked, or a finished task), or a JSON-RPC
-`error` passed through from the agent. Hub data lives in `metadata.guardrailHub` on the message or
+`error` passed through from the agent. Hub data lives in `metadata.agentsOnRails` on the message or
 task:
 
 ```ts
-interface GuardrailHubMetadata {
+interface AgentsOnRailsMetadata {
   blocked?: boolean
   stage?: 'input' | 'output'          // where a block happened
   trace?: TraceEntry[]
@@ -195,6 +199,6 @@ Signed-in Bearer token required (401 without one when Supabase is configured).
 - `DELETE /api/v1/agents/{agent_id}/mcp-servers/{server_id}` → 204; 404 if the agent had no access.
 
 Only an agent's owner sees or changes its MCP access (RLS). On every call the gateway and the test
-chat send the agent its servers and tools in `params.metadata.guardrailHub.mcpServers` (see
+chat send the agent its servers and tools in `params.metadata.agentsOnRails.mcpServers` (see
 `docs/agent-contract-a2a.md`); credentials never leave the hub.
 

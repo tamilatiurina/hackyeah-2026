@@ -1,14 +1,13 @@
 import { screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { renderApp } from '../test/renderApp'
-import { PANEL_NAV_ITEMS } from './nav'
+import { NAV_ITEMS } from './nav'
 
 const mainNav = () => screen.getByRole('navigation', { name: 'Main' })
 const location = () => screen.getByTestId('location').textContent
 
 describe('AppRoutes', () => {
-  it.each(PANEL_NAV_ITEMS.map((item) => [item.path, item.title] as const))(
+  it.each(NAV_ITEMS.map((item) => [item.path, item.title] as const))(
     '%s renders the %s page',
     (path, title) => {
       renderApp(path)
@@ -16,34 +15,38 @@ describe('AppRoutes', () => {
     },
   )
 
-  it('lists every nav item for admins', () => {
-    renderApp('/sessions')
+  it.each(['/sign-in', '/sign-up'])('%s sends signed-in users to the app', (path) => {
+    renderApp(path)
+    expect(location()).toBe('/agents')
+  })
+
+  it('lists every nav item, grouped under Library and Monitor', () => {
+    renderApp('/agents')
     const labels = within(mainNav())
       .getAllByRole('link')
       .map((a) => a.textContent)
-    expect(labels).toEqual(PANEL_NAV_ITEMS.map((i) => i.label))
+    expect(labels).toEqual(NAV_ITEMS.map((i) => i.label))
+    expect(within(mainNav()).getByText('Library')).toBeInTheDocument()
+    expect(within(mainNav()).getByText('Monitor')).toBeInTheDocument()
   })
 
-  it('redirects / to /sessions', () => {
+  it('has no context switch', () => {
+    renderApp('/agents')
+    expect(screen.queryByRole('group', { name: 'View context' })).not.toBeInTheDocument()
+  })
+
+  it('redirects / to /agents', () => {
     renderApp('/')
-    expect(location()).toBe('/sessions')
+    expect(location()).toBe('/agents')
   })
 
-  it('redirects an unknown path to /sessions', () => {
-    renderApp('/nope')
-    expect(location()).toBe('/sessions')
-  })
-
-  it.each(['/approvals', '/evals'])('redirects removed placeholder route %s to /sessions', (path) => {
-    renderApp(path)
-    expect(location()).toBe('/sessions')
-  })
-
-  it('does not advertise removed placeholder features', () => {
-    renderApp('/sessions')
-    expect(within(mainNav()).queryByRole('link', { name: 'Approvals' })).not.toBeInTheDocument()
-    expect(within(mainNav()).queryByRole('link', { name: 'Evaluators' })).not.toBeInTheDocument()
-  })
+  it.each(['/nope', '/playground', '/policies', '/incidents', '/pi-sessions'])(
+    'redirects %s to /agents',
+    (path) => {
+      renderApp(path)
+      expect(location()).toBe('/agents')
+    },
+  )
 
   it('keeps Agents active on an agent page', async () => {
     renderApp('/agents/support-bot')
@@ -52,65 +55,5 @@ describe('AppRoutes', () => {
       'aria-current',
       'page',
     )
-  })
-
-  it('sends a tester to /test and shows only Test chat', () => {
-    renderApp('/sessions', 'tester')
-    expect(location()).toBe('/test')
-    const labels = within(mainNav())
-      .getAllByRole('link')
-      .map((a) => a.textContent)
-    expect(labels).toEqual(['Test chat'])
-  })
-
-  it('sends a tester deep link to /test', () => {
-    renderApp('/agents/support-bot', 'tester')
-    expect(location()).toBe('/test')
-  })
-
-  it('switching to Tester goes to /test, and back to Developer goes to /sessions', async () => {
-    const user = userEvent.setup()
-    renderApp('/policies')
-    await user.click(screen.getByRole('button', { name: 'Tester' }))
-    expect(location()).toBe('/test')
-    await user.click(screen.getByRole('button', { name: 'Developer' }))
-    expect(location()).toBe('/sessions')
-  })
-
-  it('switching between Admin and Developer keeps the current page', async () => {
-    const user = userEvent.setup()
-    renderApp('/agents')
-    await user.click(screen.getByRole('button', { name: 'Developer' }))
-    expect(location()).toBe('/agents')
-    expect(screen.getByRole('button', { name: 'Developer' })).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('agent mode shows only the pi pages and hides panel pages', () => {
-    renderApp('/policies', 'admin', { mode: 'agent' })
-    expect(screen.getByRole('heading', { level: 1, name: 'Policies' })).toBeInTheDocument()
-    const labels = within(mainNav())
-      .getAllByRole('link')
-      .map((a) => a.textContent)
-    expect(labels).toEqual(['Playground', 'Policies', 'Incidents', 'Sessions'])
-  })
-
-  it('agent mode redirects panel deep links to the playground', () => {
-    renderApp('/agents', 'admin', { mode: 'agent' })
-    expect(location()).toBe('/playground')
-    expect(screen.getByRole('heading', { level: 1, name: 'Playground' })).toBeInTheDocument()
-  })
-
-  it('panel mode redirects /policies to the panel home (it lives in agent mode)', () => {
-    renderApp('/policies', 'admin', { mode: 'panel' })
-    expect(location()).toBe('/sessions')
-  })
-
-  it('switching to Agent Integrated goes to the playground and back to Agent Wrapped goes to Sessions', async () => {
-    const user = userEvent.setup()
-    renderApp('/sessions')
-    await user.click(screen.getByRole('button', { name: 'Agent Integrated' }))
-    expect(location()).toBe('/playground')
-    await user.click(screen.getByRole('button', { name: 'Agent Wrapped' }))
-    expect(location()).toBe('/sessions')
   })
 })

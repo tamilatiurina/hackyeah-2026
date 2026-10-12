@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { dryRunGuardrail, useCreateGuardrail } from '../../api/guardrails'
-import { useRole } from '../../app/role'
 import type {
   DryRunResult,
   Engine,
@@ -81,7 +80,6 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
   const [errors, setErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const create = useCreateGuardrail()
-  const { role } = useRole()
   const firstEngineRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -180,7 +178,7 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
         stages: STAGES[stage],
         action: effectiveAction,
         config,
-        ...(role === 'admin' && mandatory ? { is_mandatory: true } : {}),
+        ...(mandatory ? { is_mandatory: true } : {}),
       },
       {
         onSuccess: (guardrail) => {
@@ -331,7 +329,7 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
         </fieldset>
       )}
       {effectiveTemplate === 'prompt_injection' && (
-        <p className="m-0 rounded-lg bg-canvas p-3 text-sm text-[#30343B]">Uses the company injection signatures below.</p>
+        <p className="m-0 rounded-lg bg-canvas p-3 text-sm text-[#30343B]">Uses your injection signatures below.</p>
       )}
       {effectiveTemplate === 'toxicity' && (
         <div className="max-w-48">
@@ -420,17 +418,15 @@ export function NewGuardrailForm({ templates, onClose, onCreated }: NewGuardrail
         </Field>
       )}
 
-      {role === 'admin' && (
-        <label className="flex min-h-11 items-start gap-2 text-sm">
-          <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} className="mt-1" />
-          <span>
-            <span className="font-semibold">Mandatory</span>
-            <span className="block text-xs text-muted">
-              Applies to every existing and future agent, runs first, and developers cannot detach it.
-            </span>
+      <label className="flex min-h-11 items-start gap-2 text-sm">
+        <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} className="mt-1" />
+        <span>
+          <span className="font-semibold">Mandatory</span>
+          <span className="block text-xs text-muted">
+            Applies to all your existing and future agents and runs first. It can't be detached from one agent.
           </span>
-        </label>
-      )}
+        </span>
+      </label>
 
       <Field id="ng-sample" label="Try it on sample text">
         <textarea

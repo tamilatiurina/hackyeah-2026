@@ -1,23 +1,21 @@
 """A-07 read side: audit events, the rules seen in them, and sessions.
 
-Same pattern as app/mcp/repository.py: Supabase with the signed-in user's token (RLS shows only
-the caller's agents), or memory without Supabase (no owners there: everything is visible).
+Same pattern as app/mcp/repository.py: Supabase with the signed-in user's token, so RLS shows
+only the caller's own events and sessions.
 """
 
 from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated, Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 from uuid import UUID
 
 import httpx
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, status
 from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
 from app.audit import cursor
-from app.audit.memory import MEMORY
 from app.audit.models import (
     AuditEvent,
     AuditEventPage,
@@ -29,12 +27,10 @@ from app.audit.models import (
     SessionPage,
     to_session,
 )
-from app.core.config import settings
-from app.core.supabase import get_supabase_for_user
+from app.core.auth import Me
 from supabase import Client
 
 T = TypeVar("T")
-_bearer = HTTPBearer(auto_error=False)
 
 _EVENT_COLUMNS = (
     "id,at,agent_id,context_id,rule_id,rule_name,kind,stage,action,config_version,details,"
@@ -55,7 +51,7 @@ class AuditRepository(Protocol):
     def sessions(self, filters: SessionFilters) -> SessionPage: ...
 
 
-def _with_limits(counters: SessionCounters, agent_name: str | None, events: int) -> Session:
+def with_limits(counters: SessionCounters, agent_name: str | None, events: int) -> Session:
     """A session with its B-05 limit meters (the session caps and how much of them it used)."""
     from app.gateway.limits import session_limits  # app.gateway imports app.audit
 
@@ -67,54 +63,8 @@ def event_cursor(event: AuditEvent) -> str:
     return cursor.encode([event.at.isoformat(), event.id])
 
 
-def _sorted_rules(rules: dict[str, AuditRule]) -> list[AuditRule]:
+def sorted_rules(rules: dict[str, AuditRule]) -> list[AuditRule]:
     return sorted(rules.values(), key=lambda r: (r.kind != "guardrail", r.rule_name.lower()))
-
-
-class InMemoryAuditRepository:
-    def events(self, filters: EventFilters) -> AuditEventPage:
-        rows = [
-            e
-            for e in reversed(MEMORY.events)
-            if (filters.agent_id is None or e.agent_id == filters.agent_id)
-            and (filters.rule_id is None or e.rule_id == filters.rule_id)
-            and (filters.action is None or e.action == filters.action)
-            and (filters.kind is None or e.kind == filters.kind)
-            and (filters.context_id is None or e.context_id == filters.context_id)
-        ]
-        if filters.before is not None:
-            ids = [e.id for e in rows]
-            _, last_id = filters.before
-            rows = rows[ids.index(last_id) + 1 :] if last_id in ids else []
-        page = rows[: filters.limit]
-        more = len(rows) > filters.limit
-        return AuditEventPage(data=page, next_cursor=event_cursor(page[-1]) if more else None)
-
-    def rules(self) -> list[AuditRule]:
-        seen = {
-            e.rule_id: AuditRule(rule_id=e.rule_id, rule_name=e.rule_name, kind=e.kind)
-            for e in MEMORY.events
-        }
-        return _sorted_rules(seen)
-
-    def sessions(self, filters: SessionFilters) -> SessionPage:
-        counts = Counter((e.agent_id, e.context_id) for e in MEMORY.events)
-        rows = sorted(MEMORY.sessions.values(), key=lambda s: s.last_at, reverse=True)
-        rows = [
-            s
-            for s in rows
-            if (filters.agent_id is None or s.agent_id == filters.agent_id)
-            and (
-                filters.status is None
-                or (s.stopped_at is not None) == (filters.status == "stopped")
-            )
-        ]
-        page = rows[filters.offset : filters.offset + filters.limit]
-        end = filters.offset + len(page)
-        return SessionPage(
-            data=[_with_limits(s, None, counts[(s.agent_id, s.context_id)]) for s in page],
-            next_cursor=cursor.encode([str(end)]) if end < len(rows) else None,
-        )
 
 
 def _agent_name(row: dict[str, Any]) -> str | None:
@@ -191,7 +141,7 @@ class SupabaseAuditRepository:
         seen: dict[str, AuditRule] = {}
         for row in response.data:
             seen.setdefault(row["rule_id"], AuditRule.model_validate(row))
-        return _sorted_rules(seen)
+        return sorted_rules(seen)
 
     def sessions(self, filters: SessionFilters) -> SessionPage:
         query = self._client.table("agent_sessions").select(_SESSION_COLUMNS)
@@ -223,7 +173,7 @@ class SupabaseAuditRepository:
             )
             counts = Counter((e["agent_id"], e["context_id"]) for e in found.data)
         sessions = [
-            _with_limits(
+            with_limits(
                 SessionCounters.model_validate(row),
                 _agent_name(row),
                 counts[(row["agent_id"], row["context_id"])],
@@ -237,18 +187,9 @@ class SupabaseAuditRepository:
         )
 
 
-def get_audit_repository(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-) -> AuditRepository:
-    if not (settings.SUPABASE_URL and settings.SUPABASE_KEY):
-        return InMemoryAuditRepository()
-    if credentials is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "Sign in to see the audit log",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return SupabaseAuditRepository(get_supabase_for_user(credentials.credentials))
+def get_audit_repository(user: Me) -> AuditRepository:
+    """FastAPI dependency: the signed-in user's audit log and sessions."""
+    return SupabaseAuditRepository(user.client)
 
 
 def parse_event_cursor(before: str | None) -> tuple[datetime, str] | None:

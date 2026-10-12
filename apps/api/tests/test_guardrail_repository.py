@@ -2,20 +2,12 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from app.core import supabase as supabase_module
-from app.core.config import settings
-from app.guardrails.repository import (
-    InMemoryGuardrailRepository,
-    SupabaseGuardrailRepository,
-    get_guardrail_repository,
-)
+from app.guardrails.repository import SupabaseGuardrailRepository, get_guardrail_repository
 from app.main import app
-from app.seed_db import seed_guardrails_table
-from app.seeds import seed_guardrails
 from fastapi import HTTPException
-from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
+from tests import fakes
 
 client = TestClient(app)
 BASE = "/api/v1/guardrails"
@@ -43,35 +35,14 @@ def db() -> Any:
     app.dependency_overrides.clear()
 
 
-def test_without_supabase_the_in_memory_store_is_used() -> None:
-    assert isinstance(get_guardrail_repository(None), InMemoryGuardrailRepository)
-
-
-def _configure_supabase(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    monkeypatch.setattr(settings, "SUPABASE_URL", "https://example.supabase.co")
-    monkeypatch.setattr(settings, "SUPABASE_KEY", "sb_publishable_test")
-    create = MagicMock(return_value=MagicMock())
-    monkeypatch.setattr(supabase_module, "create_client", create)
-    return create
-
-
-def test_with_supabase_queries_run_as_the_signed_in_user(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    create = _configure_supabase(monkeypatch)
-    token = HTTPAuthorizationCredentials(scheme="Bearer", credentials="user-access-token")
-
-    assert isinstance(get_guardrail_repository(token), SupabaseGuardrailRepository)
-    args, kwargs = create.call_args
-    assert args == ("https://example.supabase.co", "sb_publishable_test")
-    assert kwargs["options"].headers == {"Authorization": "Bearer user-access-token"}
-
-
-def test_with_supabase_signed_out_requests_get_401(monkeypatch: pytest.MonkeyPatch) -> None:
-    _configure_supabase(monkeypatch)
-    r = client.get(BASE)
-    assert r.status_code == 401
-    assert r.json() == {"detail": "Sign in to use guardrails"}
+def test_queries_run_on_the_signed_in_users_client() -> None:
+    user = fakes.fake_user()
+    repo = get_guardrail_repository(user)
+    assert isinstance(repo, SupabaseGuardrailRepository)
+    query = user.client.table.return_value.select.return_value.order.return_value
+    query.execute.return_value.data = []
+    repo.list()
+    user.client.table.assert_called_with("guardrails")
 
 
 def test_expired_token_is_401() -> None:
@@ -140,9 +111,6 @@ def test_patch_updates_only_the_row(db: MagicMock) -> None:
 
 
 def test_delete_found_and_missing(db: MagicMock) -> None:
-    # The route reads the row first: deleting a mandatory guardrail is admin-only (FR-06).
-    lookup = db.table.return_value.select.return_value.eq.return_value.limit.return_value
-    lookup.execute.return_value.data = [PII_ROW]
     deleted = db.table.return_value.delete.return_value.eq.return_value.execute.return_value
     deleted.data = [{"id": "gr-pii"}]
     assert client.delete(f"{BASE}/gr-pii").status_code == 204
@@ -166,18 +134,3 @@ def test_invalid_stored_row_is_503(db: MagicMock) -> None:
         PII_ROW | {"engine": "not-an-engine"}
     ]
     assert client.get(BASE).status_code == 503
-
-
-def test_seed_script_skips_existing_rows() -> None:
-    database = MagicMock()
-
-    count = seed_guardrails_table(database)
-
-    assert count == len(seed_guardrails())
-    database.table.assert_called_once_with("guardrails")
-    rows = database.table.return_value.upsert.call_args.args[0]
-    assert [row["id"] for row in rows] == [g.id for g in seed_guardrails()]
-    assert database.table.return_value.upsert.call_args.kwargs == {
-        "on_conflict": "id",
-        "ignore_duplicates": True,
-    }

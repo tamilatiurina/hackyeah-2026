@@ -2,10 +2,10 @@
 
 from unittest.mock import MagicMock
 
-from app.audit.memory import MEMORY
 from app.audit.models import AuditEventIn
-from app.audit.recorder import InMemoryAuditRecorder, SupabaseAuditRecorder
+from app.audit.recorder import SupabaseAuditRecorder
 from app.gateway.keys import hash_key
+from tests.fakes import MEMORY, InMemoryAuditRecorder
 
 AGENT = "7b4eb987-4315-4745-83c7-258061f2f2c4"
 

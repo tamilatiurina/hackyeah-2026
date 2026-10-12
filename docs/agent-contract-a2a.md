@@ -1,6 +1,6 @@
 # Agent contract: A2A 1.0
 
-Every agent registered in Guardrail Hub speaks the [A2A protocol](https://a2a-protocol.org/v1.0.0/specification/) version **1.0** over its **JSON-RPC** binding. The hub calls agents with it, and the guarded URL exposes the same protocol, so a client app switches to the guarded agent by changing one URL. This replaces the earlier "pi harness message format". pi coding agents are not part of this project; they get a separate feature.
+Every agent registered in AgentsOnRails.dev speaks the [A2A protocol](https://a2a-protocol.org/v1.0.0/specification/) version **1.0** over its **JSON-RPC** binding. The hub calls agents with it, and the guarded URL exposes the same protocol, so a client app switches to the guarded agent by changing one URL. This replaces the earlier "pi harness message format". pi coding agents are not part of this project; they get a separate feature.
 
 This document is the hub's **profile** of A2A: the subset the hub relies on, plus a few conventions for things A2A leaves open. Anything not mentioned follows the spec. The normative types are in [`a2a.proto`](https://github.com/a2aproject/A2A/blob/main/specification/a2a.proto); JSON uses its camelCase field names.
 
@@ -100,8 +100,8 @@ A JSON-RPC `error` from the agent is passed through to the caller and logged.
 
 - **Text that guardrails check.** A guardrail sees the `text` parts of a message, joined with newlines. `data` parts are checked as their JSON serialization. `raw` and `url` (file) parts pass through unchecked, and the trace says so.
 - **Statelessness and sessions.** The hub stores no conversation content. It forwards one message per call; any memory of earlier turns is up to the agent, keyed by `contextId`. The hub uses `contextId` as the **session key** for its counters (turns, tokens, cost, elapsed time) and for per-session limits (FR-25, FR-26, FR-36). If the caller sends no `contextId`, the hub generates one and returns it.
-- **Governance prompt and context.** A2A has no system role. The hub adds the governance prompt and the agent's context (FR-14, FR-32) as **leading text parts** of the user message, governance first, then context. Each one is tagged in part metadata: `{"text": "…", "metadata": {"guardrailHub": "governance"}}` or `"context"`. Agents that ignore metadata just see extra text before the user's message.
-- **MCP servers.** The MCP servers an agent may use, and which of their tools (FR-17), go in `params.metadata.guardrailHub.mcpServers`: a list of `{"id", "name", "url", "allowedTools": ["…"]}`, set on every forwarded call (guarded URL and test chat) when the agent has any. Credentials are never sent; the key stays in the hub. With no MCP access the field is absent.
+- **Governance prompt and context.** A2A has no system role. The hub adds the governance prompt and the agent's context (FR-14, FR-32) as **leading text parts** of the user message, governance first, then context. Each one is tagged in part metadata: `{"text": "…", "metadata": {"agentsOnRails": "governance"}}` or `"context"`. Agents that ignore metadata just see extra text before the user's message.
+- **MCP servers.** The MCP servers an agent may use, and which of their tools (FR-17), go in `params.metadata.agentsOnRails.mcpServers`: a list of `{"id", "name", "url", "allowedTools": ["…"]}`, set on every forwarded call (guarded URL and test chat) when the agent has any. Credentials are never sent; the key stays in the hub. With no MCP access the field is absent.
 - **Token usage.** A2A has no usage field. When a reply message or task carries `metadata.usage = {"inputTokens": n, "outputTokens": m}`, the hub uses those numbers. Otherwise it estimates tokens from the text. Cost is the token count priced from the hub's price table (FR-25).
 - **Timeouts.** The per-call time limit (FR-26) cancels the upstream HTTP request. The caller gets JSON-RPC error `-32603` with `data.reason = "timeout"`.
 
@@ -122,7 +122,7 @@ Each deployment gets two routes on the shared gateway:
   3. Input guardrails run on the user message. **Redact** rewrites the text parts before forwarding. **Block** answers without calling the agent (see below).
   4. The request is forwarded upstream with the stored auth header.
   5. Output guardrails run on the reply text. **Redact** rewrites it; **block** replaces the reply.
-  6. The trace (FR-11) goes in the reply's `metadata.guardrailHub.trace`. Clients that don't know it ignore it.
+  6. The trace (FR-11) goes in the reply's `metadata.agentsOnRails.trace`. Clients that don't know it ignore it.
 
   A **blocked** call returns a task the caller can read as a refusal:
 
@@ -142,7 +142,7 @@ Each deployment gets two routes on the shared gateway:
             "parts": [{ "text": "Blocked by guardrail \"Prompt injection\": ignore-instructions signature matched." }]
           }
         },
-        "metadata": { "guardrailHub": { "blocked": true, "stage": "input", "trace": [] } }
+        "metadata": { "agentsOnRails": { "blocked": true, "stage": "input", "trace": [] } }
       }
     }
   }

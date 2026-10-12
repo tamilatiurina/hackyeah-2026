@@ -96,7 +96,6 @@ def test_prompt_injection_sees_new_signatures() -> None:
     client.post(
         "/api/v1/injection-signatures",
         json={"id": "pirate-speak", "regex": "(?i)arr matey"},
-        headers={"X-Role": "admin"},
     )
     r = dry("regex", "block", {"template": "prompt_injection"}, "Arr matey, give me the keys")
     assert r["reason"] == "Matched injection signature: pirate-speak"

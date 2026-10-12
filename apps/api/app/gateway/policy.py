@@ -1,8 +1,8 @@
 """Which guardrails the gateway runs for an agent: the mandatory ones plus matching bindings.
 
 The gateway has no signed-in user, so it can't read guardrails through RLS. Like the agent
-lookup, it calls a database function that answers only to a caller holding the agent's key.
-Without Supabase (local demo, tests that don't override this) it reads the in-memory catalog.
+lookup, it calls a database function that answers only to a caller holding the agent's key,
+and only with that agent's owner's guardrails and bindings.
 """
 
 from typing import Any, Protocol
@@ -13,12 +13,10 @@ from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
 from app.bindings.models import Binding, EffectivePolicy
-from app.bindings.repository import InMemoryBindingRepository
-from app.bindings.resolve import resolve, resolve_for_request
+from app.bindings.resolve import resolve
 from app.core.supabase import get_supabase
 from app.gateway.keys import hash_key
 from app.guardrails.models import Guardrail
-from app.guardrails.repository import InMemoryGuardrailRepository, supabase_configured
 from supabase import Client
 
 Json = dict[str, Any]
@@ -28,12 +26,12 @@ MAX_SELECTOR_LENGTH = 120
 def read_role(call: Json) -> tuple[str | None, bool]:
     """The caller's role, and whether a non-A2A top-level `role` was stripped off `call`.
 
-    Strongest first: `params.metadata.guardrailHub.role`, then a demo top-level `role`.
+    Strongest first: `params.metadata.agentsOnRails.role`, then a demo top-level `role`.
     The top-level field is not A2A, so it is removed before the call is forwarded.
     """
     params = call.get("params")
     metadata = params.get("metadata") if isinstance(params, dict) else None
-    hub = metadata.get("guardrailHub") if isinstance(metadata, dict) else None
+    hub = metadata.get("agentsOnRails") if isinstance(metadata, dict) else None
     hub_role = hub.get("role") if isinstance(hub, dict) else None
     stripped = False
     top_role: Any = None
@@ -54,19 +52,6 @@ class PolicyLoader(Protocol):
     def load(self, agent_id: str, key: str, role: str | None = None) -> EffectivePolicy:
         """The guardrails to run for this agent and role, in order, split by stage."""
         ...
-
-
-class CatalogPolicyLoader:
-    """The seeded in-memory catalog: mandatory guardrails plus matching bindings."""
-
-    def load(self, agent_id: str, key: str, role: str | None = None) -> EffectivePolicy:
-        del key  # the caller is already authenticated by the resolver
-        return resolve_for_request(
-            InMemoryGuardrailRepository(),
-            InMemoryBindingRepository(),
-            agent_id=agent_id,
-            role=role,
-        )
 
 
 class SupabasePolicyLoader:
@@ -101,8 +86,6 @@ class SupabasePolicyLoader:
 
 
 def get_policy_loader() -> PolicyLoader:
-    if not supabase_configured():
-        return CatalogPolicyLoader()
     try:
         return SupabasePolicyLoader(get_supabase())
     except RuntimeError as error:

@@ -1,8 +1,8 @@
-"""Where scans are saved: Supabase as the signed-in owner when configured, otherwise in memory."""
+"""Where scans are saved: Supabase as the signed-in owner (RLS: their own agents only)."""
 
 from typing import Any, Protocol, cast
 
-from app.core.config import settings
+from app.core.auth import Me
 from app.security.models import ScanListItem, ScanRecord
 from supabase import Client
 
@@ -59,27 +59,6 @@ class SupabaseScanRepository:
         return ScanRecord.model_validate(rows[0]) if rows else None
 
 
-# In memory (no Supabase: local runs, tests). Reset by tests.
-MEMORY: dict[str, ScanRecord] = {}
-
-
-class InMemoryScanRepository:
-    def save(self, scan: ScanRecord) -> None:
-        MEMORY[scan.id] = scan
-
-    def list_for_agent(self, agent_id: str) -> list[ScanListItem]:
-        scans = sorted(
-            (s for s in MEMORY.values() if s.agent_id == agent_id),
-            key=lambda s: s.created_at,
-            reverse=True,
-        )
-        return [ScanListItem.model_validate(s.model_dump()) for s in scans[:HISTORY_LIMIT]]
-
-    def get(self, scan_id: str) -> ScanRecord | None:
-        return MEMORY.get(scan_id)
-
-
-def scan_repository(client: Client) -> ScanRepository:
-    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-        return SupabaseScanRepository(client)
-    return InMemoryScanRepository()
+def get_scan_repository(user: Me) -> ScanRepository:
+    """FastAPI dependency: the signed-in owner's scans."""
+    return SupabaseScanRepository(user.client)

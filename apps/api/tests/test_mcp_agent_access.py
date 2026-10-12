@@ -1,7 +1,5 @@
 """FR-17: which MCP servers and tools each agent may use; editing a registered server."""
 
-import pytest
-from app.core.config import settings
 from app.main import app
 from fastapi.testclient import TestClient
 
@@ -155,12 +153,3 @@ def test_deleting_a_server_detaches_it() -> None:
     client.put(f"{access()}/{server}", json={"allowed_tools": ["get_order"]})
     assert client.delete(f"{SERVERS}/{server}").status_code == 204
     assert client.get(access()).json() == []
-
-
-def test_needs_a_token_with_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "SUPABASE_URL", "https://example.supabase.co")
-    monkeypatch.setattr(settings, "SUPABASE_KEY", "publishable")
-    assert client.get(access()).status_code == 401
-    assert client.put(f"{access()}/mcp-x", json={"allowed_tools": ["a"]}).status_code == 401
-    assert client.delete(f"{access()}/mcp-x").status_code == 401
-    assert client.patch(f"{SERVERS}/mcp-x", json={"name": "X"}).status_code == 401

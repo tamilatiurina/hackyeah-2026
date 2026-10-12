@@ -1,32 +1,30 @@
-import { AuthContext, MemoryRouter, ModeContext, RoleContext, Sidebar } from 'web'
+import { AuthContext, MemoryRouter, Sidebar } from 'web'
 
 const noop = () => {}
 const auth = {
   status: 'ready' as const,
-  session: { accessToken: '', email: 'maria.kowalska@acme.dev', anonymous: false },
+  session: { accessToken: '', userId: 'preview-user', email: 'maria.kowalska@acme.dev' },
   configured: true,
   notice: null,
   signIn: async () => null,
+  signUp: async () => ({ error: null, confirmEmail: false }),
+  signInWithOAuth: async () => null,
+  sendPasswordReset: async () => null,
+  updatePassword: async () => null,
   signOut: async () => {},
   watchTables: null,
 }
 
-function Shell({ mode, role, path }: { mode: 'panel' | 'agent'; role: 'admin' | 'dev' | 'tester'; path: string }) {
+function Shell({ path }: { path: string }) {
   return (
     <MemoryRouter initialEntries={[path]}>
       <AuthContext value={auth}>
-        <RoleContext value={{ role, setRole: noop }}>
-          <ModeContext value={{ mode, setMode: noop }}>
-            <div className="h-[760px]">
-              <Sidebar id="preview-sidebar" open onNavigate={noop} counts={{ '/sessions': 3 }} />
-            </div>
-          </ModeContext>
-        </RoleContext>
+        <div className="h-[760px]">
+          <Sidebar id="preview-sidebar" open onNavigate={noop} counts={{ '/audit': 3 }} />
+        </div>
       </AuthContext>
     </MemoryRouter>
   )
 }
 
-export const AgentWrapped = () => <Shell mode="panel" role="admin" path="/sessions" />
-export const AgentIntegrated = () => <Shell mode="agent" role="admin" path="/playground" />
-export const TesterRole = () => <Shell mode="panel" role="tester" path="/test" />
+export const Navigation = () => <Shell path="/agents" />

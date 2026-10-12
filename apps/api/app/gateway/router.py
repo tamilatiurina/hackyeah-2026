@@ -14,8 +14,8 @@ POST /a/<agent id>
 
      B-02: input guardrails run on the user message first (a block answers without calling
      the agent; a redaction changes what it receives), output guardrails on the reply, and the
-     trace goes in the reply's metadata.guardrailHub. With no guardrails at all, the call and
-     the reply pass through byte for byte. The caller's role (params.metadata.guardrailHub.role,
+     trace goes in the reply's metadata.agentsOnRails. With no guardrails at all, the call and
+     the reply pass through byte for byte. The caller's role (params.metadata.agentsOnRails.role,
      or the demo's top-level role) selects role bindings and is reported in the hub data.
 
 After a successful forward the gateway counts the turn for the message's contextId, and every
@@ -35,16 +35,14 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 
 from app.audit.recorder import AuditRecorder, get_audit_recorder
+from app.core.supabase import get_supabase
 from app.gateway import a2a
-from app.gateway.pipeline import GuardrailEngine
+from app.gateway.pipeline import GuardrailEngine, LocalEngine
 from app.gateway.policy import PolicyLoader, get_policy_loader, read_role
 from app.gateway.resolver import AgentResolver, get_agent_resolver
-from app.gateway.service import (
-    Audit,
-    get_gateway_http_client,
-    get_guardrail_engine,
-    send_guarded,
-)
+from app.gateway.service import Audit, get_gateway_http_client, send_guarded
+from app.guardrails.judge import get_judge
+from app.guardrails.signatures import GatewaySignatureLoader, SignatureLoader
 from app.mcp.agent_access import McpGrantLoader, get_gateway_mcp_loader, load_grants
 
 __all__ = ["get_gateway_http_client", "get_guardrail_engine", "router"]
@@ -59,6 +57,26 @@ def _is_uuid(value: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def get_signature_loader() -> SignatureLoader:
+    try:
+        return GatewaySignatureLoader(get_supabase())
+    except RuntimeError as error:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway is not configured"
+        ) from error
+
+
+def get_guardrail_engine(
+    agent_id: str,
+    key: Annotated[str | None, Depends(_api_key)],
+    signatures: Annotated[SignatureLoader, Depends(get_signature_loader)],
+) -> GuardrailEngine:
+    """The guarded URL's engine: the agent owner's injection signatures, read with its key."""
+    if not key or not _is_uuid(agent_id):
+        return LocalEngine(get_judge())  # the call is refused before any guardrail runs
+    return LocalEngine(get_judge(), signatures.load(agent_id, key))
 
 
 def _unauthorized() -> HTTPException:

@@ -15,8 +15,7 @@ from typing import Any
 import httpx
 import pytest
 from app.api.routes.agents.deps import ResolvedUpstream
-from app.audit.memory import MEMORY
-from app.audit.recorder import InMemoryAuditRecorder, get_audit_recorder
+from app.audit.recorder import get_audit_recorder
 from app.bindings.models import EffectivePolicy
 from app.bindings.resolve import resolve
 from app.core.config import settings
@@ -25,9 +24,9 @@ from app.gateway import service as gateway_service
 from app.gateway.policy import get_policy_loader
 from app.gateway.resolver import UpstreamTarget, get_agent_resolver
 from app.main import app
-from app.store import store
 from fastapi.testclient import TestClient
 from pydantic import HttpUrl
+from tests.fakes import MEMORY, InMemoryAuditRecorder, store
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test-agent" / "src"))
 from acme_test_agent.app import create_app as create_test_agent  # noqa: E402
@@ -91,7 +90,7 @@ def say(text: str, context_id: str | None = "ctx-1") -> dict[str, Any]:
 def hub_of(body: dict[str, Any]) -> dict[str, Any]:
     result = body["result"]
     holder = result["message"] if "message" in result else result["task"]
-    hub: dict[str, Any] = holder["metadata"]["guardrailHub"]
+    hub: dict[str, Any] = holder["metadata"]["agentsOnRails"]
     return hub
 
 
@@ -173,7 +172,7 @@ def test_a_blocking_token_cap_withholds_the_reply(monkeypatch: pytest.MonkeyPatc
     reason = task["status"]["message"]["parts"][0]["text"]
     assert reason.startswith('Blocked by limit "Tokens per call: used')
     assert "word199" not in json.dumps(body)  # the long reply never reaches the caller
-    hub = task["metadata"]["guardrailHub"]
+    hub = task["metadata"]["agentsOnRails"]
     assert hub["blocked"] is True and hub["usage"]["outputTokens"] > 50
     [event] = MEMORY.events
     assert (event.rule_id, event.action, event.context_id) == ("maxCallTokens", "block", None)

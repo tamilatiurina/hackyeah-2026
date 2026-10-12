@@ -46,15 +46,9 @@ describe('phone drawer', () => {
     expectClosed()
   })
 
-  it('closes when the role changes', async () => {
-    const user = await openMenu()
-    await user.click(screen.getByRole('button', { name: 'Developer' }))
-    expectClosed()
-  })
-
   it('moves focus to the first nav link when opened', async () => {
     await openMenu()
-    expect(screen.getByRole('link', { name: 'Sessions' })).toHaveFocus()
+    expect(screen.getByRole('link', { name: 'Agents' })).toHaveFocus()
   })
 
   it('returns focus to the Menu button after Escape', async () => {

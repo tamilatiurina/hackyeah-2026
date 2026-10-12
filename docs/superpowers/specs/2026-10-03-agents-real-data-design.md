@@ -68,7 +68,7 @@ Registration does a real `GET` to the upstream before saving (and refuses non-pu
   Registers the token with the API client and the 401 handler.
 - `useAuth()` hook.
 - `RequireAuth`: while loading shows nothing; signed out → `<Navigate to="/sign-in" state={{from}}>`.
-- `/sign-in` page (outside the app layout): heading "Sign in to Guardrail Hub", Email and Password
+- `/sign-in` page (outside the app layout): heading "Sign in to AgentsOnRails.dev", Email and Password
   fields, **Sign in** button (disabled while pending), Supabase's error message shown in a
   `role="alert"`, an optional notice from navigation state (e.g. "Your session expired. Sign in
   again."). When `configured` is false: "Supabase isn't configured. Set VITE_SUPABASE_URL and

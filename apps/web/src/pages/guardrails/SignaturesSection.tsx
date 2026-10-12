@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAddSignature, useDeleteSignature, useSignatures } from '../../api/guardrails'
-import { useRole } from '../../app/role'
 import { buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
 import { EmptyState, LoadingRows } from '../../ui/Page'
 
 export function SignaturesSection() {
-  const { role } = useRole()
-  const isAdmin = role === 'admin'
   const signatures = useSignatures()
   const add = useAddSignature()
   const remove = useDeleteSignature()
@@ -49,20 +46,16 @@ export function SignaturesSection() {
           <h2 id="signatures-title" className="m-0 text-lg font-semibold">
             Injection signatures
           </h2>
-          <span className="text-sm text-muted">One company-wide list, used by every agent. Admins edit it.</span>
+          <span className="text-sm text-muted">Your list, used by the prompt injection guardrail on all your agents.</span>
         </div>
-        {isAdmin ? (
-          !adding && (
-            <button ref={addButtonRef} type="button" className={buttonSecondary} onClick={() => setAdding(true)}>
-              Add signature
-            </button>
-          )
-        ) : (
-          <span className="text-xs text-muted">Read-only for developers</span>
+        {!adding && (
+          <button ref={addButtonRef} type="button" className={buttonSecondary} onClick={() => setAdding(true)}>
+            Add signature
+          </button>
         )}
       </div>
 
-      {isAdmin && adding && (
+      {adding && (
         <form onSubmit={save} className="grid gap-3 sm:grid-cols-[14rem_1fr_auto] sm:items-end">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="sig-id" className="text-[13px] font-semibold text-[#30343B]">
@@ -121,7 +114,7 @@ export function SignaturesSection() {
       ) : signatures.isPending ? (
         <LoadingRows label="Loading signatures" count={2} />
       ) : signatures.data.length === 0 ? (
-        <EmptyState title="No injection signatures" description="No company-wide signatures are configured." />
+        <EmptyState title="No injection signatures" description="Add a pattern for the prompt injection guardrail to match." />
       ) : (
         <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
           {signatures.data.map((s) => (
@@ -129,7 +122,7 @@ export function SignaturesSection() {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span className="min-w-48 font-mono text-[13px] font-semibold">{s.id}</span>
                 <code className="min-w-0 flex-1 font-mono text-[13px] break-all text-muted">{s.regex}</code>
-                {isAdmin && confirmingId !== s.id && (
+                {confirmingId !== s.id && (
                   <button
                     type="button"
                     aria-label={`Delete ${s.id}`}

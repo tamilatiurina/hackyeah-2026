@@ -5,6 +5,7 @@ import type { Binding, BindingUpdate, EffectivePolicy } from './types'
 // FR-05: guardrails attached to an agent (the API also supports role and user scopes).
 export const bindingKeys = {
   agent: (agentId: string) => ['bindings', 'agent', agentId] as const,
+  allAgents: ['bindings', 'all-agents'] as const,
   effective: (agentId: string) => ['effective-guardrails', agentId] as const,
 }
 
@@ -21,6 +22,14 @@ export function useAgentBindings(agentId: string) {
   })
 }
 
+/** Every agent's bindings in one call, for the agents list. */
+export function useAllAgentBindings() {
+  return useQuery({
+    queryKey: bindingKeys.allAgents,
+    queryFn: () => getJson<Binding[]>('/bindings?scope_type=agent'),
+  })
+}
+
 export function useEffectiveGuardrails(agentId: string) {
   return useQuery({
     queryKey: bindingKeys.effective(agentId),
@@ -33,6 +42,7 @@ function useRefresh(agentId: string) {
   return () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: bindingKeys.agent(agentId) }),
+      queryClient.invalidateQueries({ queryKey: bindingKeys.allAgents }),
       queryClient.invalidateQueries({ queryKey: bindingKeys.effective(agentId) }),
     ])
 }

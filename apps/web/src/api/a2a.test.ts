@@ -20,7 +20,7 @@ const message = (text: string, trace: TraceEntry[] = [], extra: object = {}): Se
       contextId: 'ctx-1',
       role: 'ROLE_AGENT',
       parts: [{ text }],
-      metadata: { guardrailHub: { trace, ...extra } },
+      metadata: { agentsOnRails: { trace, ...extra } },
     },
   },
 })
@@ -54,7 +54,7 @@ describe('readReply', () => {
               parts: [{ text: 'Blocked by guardrail "Prompt injection": ignore-instructions signature matched.' }],
             },
           },
-          metadata: { guardrailHub: { blocked: true, stage: 'input', trace: [run('block', 'input')] } },
+          metadata: { agentsOnRails: { blocked: true, stage: 'input', trace: [run('block', 'input')] } },
         },
       },
     }

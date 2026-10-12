@@ -90,7 +90,7 @@ def seed_guardrails() -> list[Guardrail]:
 
 
 def seed_signatures() -> list[InjectionSignature]:
-    """Copy of policy.json defaults.injection.patterns (tests/test_seeds.py keeps it in sync)."""
+    """Prompt-injection signatures seeded into an empty signature list."""
     return [
         InjectionSignature(
             id="ignore-instructions",

@@ -671,7 +671,7 @@ function seedGroups(): Group[] {
   ]
 }
 
-// From the "Guardrail Hub Control Panel" prototype. Runtime rule counts are the effective
+// From the "AgentsOnRails.dev Control Panel" prototype. Runtime rule counts are the effective
 // command + file rules in packages/pi-control-layer/policy.json.
 function seedAgents(now: number): Agent[] {
   return [
@@ -2010,7 +2010,7 @@ export function RegisterAgentForm({ groups, defaultGroupId, onClose, onRegistere
           {registered.name} registered
         </h2>
         <p className="m-0 text-sm text-muted">
-          Start the pi agent with the Guardrail Hub extension. It reports to the control plane at{' '}
+          Start the pi agent with the AgentsOnRails.dev extension. It reports to the control plane at{' '}
           <code className="font-mono text-[13px]">{CONTROL_PLANE_URL}</code> and appears in Fleet once it connects.
         </p>
         <CommandBlock command={runtimeStartCommand(registered.name)} />
@@ -2108,7 +2108,7 @@ export function RegisterAgentForm({ groups, defaultGroupId, onClose, onRegistere
       {!isProxy && (
         <div className="flex flex-col gap-2 rounded-lg bg-canvas p-3 text-sm text-[#30343B]">
           <span>
-            Start the pi agent with the Guardrail Hub extension and this name as <code className="font-mono">AGENT_NAME</code>.
+            Start the pi agent with the AgentsOnRails.dev extension and this name as <code className="font-mono">AGENT_NAME</code>.
             It reports to <code className="font-mono">{CONTROL_PLANE_URL}</code> and appears in Fleet once it connects.
           </span>
           <code className="font-mono text-[13px] break-all">{runtimeStartCommand(name.trim() || '<name>')}</code>

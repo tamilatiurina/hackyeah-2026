@@ -1517,4 +1517,4 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 5: Verification
 
 - [ ] **Step 1:** `cd apps/web && pnpm install --frozen-lockfile && pnpm lint && pnpm build && pnpm test` — all pass.
-- [ ] **Step 2:** Against production (read-only, as a guest): `GET /api/v1/agents/{id}` through `https://hackyeah-2026-dsc22.vercel.app` for a guest's own agent if one exists, otherwise confirm 404 → "Agent not found" behaviour matches; `PATCH`/`DELETE` returning 405 confirms the "not available yet" states will show. Do not create or modify production data.
+- [ ] **Step 2:** Against production (read-only, as a guest): `GET /api/v1/agents/{id}` through `https://agentsonrails.dev` for a guest's own agent if one exists, otherwise confirm 404 → "Agent not found" behaviour matches; `PATCH`/`DELETE` returning 405 confirms the "not available yet" states will show. Do not create or modify production data.

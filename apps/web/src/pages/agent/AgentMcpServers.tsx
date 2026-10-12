@@ -1,35 +1,40 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useAgentMcpServers, useRemoveAgentMcpServer, useSetAgentMcpServer } from '../../api/agentMcpServers'
+import { useCompleteSetupStep } from '../../api/agents'
 import { useMcpServers } from '../../api/mcpServers'
 import type { Agent, AgentMcpServer } from '../../api/types'
-import { buttonPrimary, buttonSecondary, inputClass } from '../../ui/classes'
+import { buttonPrimary } from '../../ui/classes'
+import { useToast } from '../../ui/toastContext'
+import { ChevronRight, sectionCard, sectionText, sectionTitle, smallButton, textLink } from './workspaceUi'
 
-const small = `${buttonSecondary} px-3 text-xs`
-
-/** FR-17: which registered MCP servers this agent may use, and which of their tools. The agent gets
- * this list on every call (params.metadata.guardrailHub.mcpServers); credentials stay in the hub. */
+/** Setup step 3 (FR-17), optional: which registered MCP servers this agent may use, and which of
+ * their tools. The agent gets this list on every call (params.metadata.agentsOnRails.mcpServers);
+ * credentials stay in the hub. */
 export function AgentMcpServers({ agent }: { agent: Agent }) {
   const access = useAgentMcpServers(agent.id)
   const servers = useMcpServers()
   const set = useSetAgentMcpServer(agent.id)
   const remove = useRemoveAgentMcpServer(agent.id)
-  const [adding, setAdding] = useState('')
-  const [status, setStatus] = useState('')
+  const completeStep = useCompleteSetupStep(agent.id)
+  const toast = useToast()
   const [error, setError] = useState<string | null>(null)
 
   const attached = new Set(access.data?.map((e) => e.server_id))
   const available = servers.data?.filter((s) => !attached.has(s.id)) ?? []
-  const toAdd = available.some((s) => s.id === adding) ? adding : (available[0]?.id ?? '')
 
-  const add = () => {
-    const server = available.find((s) => s.id === toAdd)
+  const add = (serverId: string) => {
+    const server = available.find((s) => s.id === serverId)
     if (!server) return
     setError(null)
     set.mutate(
       { serverId: server.id, tools: server.allowed_tools },
       {
-        onSuccess: () => setStatus(`Added ${server.name} with all of its tools.`),
+        onSuccess: () => {
+          toast(`Added ${server.name} with all of its tools.`)
+          // Granting a server finishes the step; record it so the agents list sees it too.
+          if (!agent.mcp_reviewed) completeStep.mutate('mcp')
+        },
         onError: (e) => setError(e.message),
       },
     )
@@ -40,7 +45,7 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
     content = (
       <p role="alert" className="m-0 text-sm">
         Couldn't load this agent's MCP servers.{' '}
-        <button type="button" className={small} onClick={() => void access.refetch()}>
+        <button type="button" className={smallButton} onClick={() => void access.refetch()}>
           Retry
         </button>
       </p>
@@ -48,7 +53,11 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
   } else if (access.isPending) {
     content = <p className="m-0 text-sm text-muted">Loading MCP servers…</p>
   } else if (access.data.length === 0) {
-    content = <p className="m-0 text-sm text-muted">This agent has no MCP servers yet.</p>
+    content = (
+      <p className="m-0 rounded-lg border border-dashed border-line-strong px-3 py-3.5 text-sm text-muted">
+        This agent has no MCP servers yet. It answers from its own knowledge only.
+      </p>
+    )
   } else {
     content = (
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
@@ -62,7 +71,7 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
                   { serverId: entry.server_id, tools },
                   {
                     onSuccess: () => {
-                      setStatus(`Saved the tools for ${entry.name}.`)
+                      toast(`Saved the tools for ${entry.name}.`)
                       done(null)
                     },
                     onError: (e) => done(e.message),
@@ -71,7 +80,7 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
               }
               onRemove={() =>
                 remove.mutate(entry.server_id, {
-                  onSuccess: () => setStatus(`Removed ${entry.name}.`),
+                  onSuccess: () => toast(`Removed ${entry.name}.`),
                   onError: (e) => setError(e.message),
                 })
               }
@@ -83,64 +92,75 @@ export function AgentMcpServers({ agent }: { agent: Agent }) {
   }
 
   return (
-    <section
-      aria-labelledby="agent-mcp-title"
-      className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5"
-    >
-      <div className="flex flex-col gap-1">
-        <h2 id="agent-mcp-title" className="m-0 text-lg font-semibold">
-          MCP servers
-        </h2>
-        <p className="m-0 text-sm text-muted">
-          Tool servers this agent may use, and which of their tools. The agent receives this list on every call;
-          credentials stay in the hub.
-        </p>
-      </div>
-      <p role="status" className="m-0 text-sm text-teal-dark empty:hidden">
-        {status}
-      </p>
-      {error && (
-        <p role="alert" className="m-0 text-sm text-danger">
-          {error}
-        </p>
-      )}
-
-      {content}
-
-      {servers.isSuccess && servers.data.length === 0 ? (
-        <p className="m-0 text-sm text-muted">
-          No MCP servers are registered yet.{' '}
-          <Link to="/mcp" className="font-semibold">
-            Register one
-          </Link>
-        </p>
-      ) : (
-        available.length > 0 && (
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex min-w-56 flex-col gap-1.5">
-              <label htmlFor="agent-mcp-add" className="text-[13px] font-semibold text-[#30343B]">
-                Add MCP server
-              </label>
-              <select
-                id="agent-mcp-add"
-                value={toAdd}
-                onChange={(e) => setAdding(e.target.value)}
-                className={inputClass}
-              >
-                {available.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button type="button" className={buttonSecondary} disabled={set.isPending} onClick={add}>
-              Add
-            </button>
+    <div className="flex flex-col gap-6">
+      <section aria-labelledby="agent-mcp-title" className={sectionCard}>
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="agent-mcp-title" className={sectionTitle}>
+              MCP tools
+            </h2>
+            <span className="rounded-md bg-[#F0F0EB] px-2 py-px text-[11px] font-semibold text-[#30343B]">Optional</span>
           </div>
-        )
-      )}
-    </section>
+          <p className={sectionText}>
+            Tool servers this agent may use, and which of their tools. The agent receives this list on every call;
+            credentials stay in the hub.
+          </p>
+        </div>
+        {error && (
+          <p role="alert" className="m-0 text-sm text-danger">
+            {error}
+          </p>
+        )}
+        {content}
+      </section>
+
+      <section aria-labelledby="agent-mcp-registered" className={sectionCard}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 id="agent-mcp-registered" className="m-0 text-base font-semibold">
+              Registered servers
+            </h2>
+            <p className={sectionText}>Adding a server grants all of its tools. Untick the ones the agent shouldn't call.</p>
+          </div>
+          <Link to="/mcp" className={textLink}>
+            Register a server
+            <ChevronRight />
+          </Link>
+        </div>
+        {servers.isPending ? (
+          <p className="m-0 text-sm text-muted">Loading registered servers…</p>
+        ) : servers.isError ? (
+          <p role="alert" className="m-0 text-sm text-danger">
+            Couldn't load the registered MCP servers.
+          </p>
+        ) : servers.data.length === 0 ? (
+          <p className="m-0 text-sm text-muted">No MCP servers are registered yet.</p>
+        ) : available.length === 0 ? (
+          <p className="m-0 text-sm text-muted">Every registered server is already granted to this agent.</p>
+        ) : (
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-2.5 p-0">
+            {available.map((s) => (
+              <li key={s.id} className="flex flex-col gap-2.5 rounded-[10px] border border-line p-3.5">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold">{s.name}</span>
+                  <span className="font-mono text-xs break-all text-muted">{s.url}</span>
+                </div>
+                <span className="text-[13px] text-muted">{s.allowed_tools.join(', ') || 'No tools'}</span>
+                <button
+                  type="button"
+                  aria-label={`Add ${s.name}`}
+                  className={`${smallButton} self-start font-semibold hover:border-teal hover:bg-teal-soft hover:text-teal-dark`}
+                  disabled={set.isPending}
+                  onClick={() => add(s.id)}
+                >
+                  + Add
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   )
 }
 
@@ -171,15 +191,15 @@ function ServerAccess({ entry, busy, onSave, onRemove }: ServerAccessProps) {
   }
 
   return (
-    <fieldset aria-labelledby={legendId} className="m-0 flex flex-col gap-3 rounded-lg border border-line p-4">
-      <div id={legendId} className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-semibold">{entry.name}</span>
+    <fieldset aria-labelledby={legendId} className="m-0 flex flex-col gap-3 rounded-[10px] border border-line p-4">
+      <div id={legendId} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-[15px] font-semibold">{entry.name}</span>
         <span className="font-mono text-xs break-all text-muted">{entry.url}</span>
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5">
         {entry.available_tools.map((tool) => (
-          <label key={tool} className="flex min-h-9 items-center gap-2 font-mono text-[13px]">
-            <input type="checkbox" checked={chosen.has(tool)} onChange={() => toggle(tool)} />
+          <label key={tool} className="flex min-h-9 cursor-pointer items-center gap-2 font-mono text-[13px]">
+            <input type="checkbox" className="size-4 accent-teal" checked={chosen.has(tool)} onChange={() => toggle(tool)} />
             {tool}
           </label>
         ))}
@@ -192,27 +212,38 @@ function ServerAccess({ entry, busy, onSave, onRemove }: ServerAccessProps) {
           {error}
         </p>
       )}
-      <div className="flex flex-wrap justify-end gap-2">
-        {dirty && (
-          <button
-            type="button"
-            aria-label={`Save tools for ${entry.name}`}
-            className={`${buttonPrimary} min-h-9 px-3 text-xs`}
-            disabled={busy || selection.length === 0}
-            onClick={() => onSave(selection, setError)}
-          >
-            Save
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[13px] text-muted">
+          {selection.length} of {entry.available_tools.length} tools allowed{dirty ? ' · unsaved' : ''}
+        </span>
+        <span className="flex flex-wrap gap-1.5">
+          {dirty && (
+            <>
+              <button
+                type="button"
+                className={smallButton}
+                onClick={() => {
+                  setChosen(new Set(entry.allowed_tools))
+                  setError(null)
+                }}
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                aria-label={`Save tools for ${entry.name}`}
+                className={`${buttonPrimary} min-h-9 px-3 text-[13px]`}
+                disabled={busy || selection.length === 0}
+                onClick={() => onSave(selection, setError)}
+              >
+                Save tools
+              </button>
+            </>
+          )}
+          <button type="button" aria-label={`Remove ${entry.name}`} className={smallButton} disabled={busy} onClick={onRemove}>
+            Remove server
           </button>
-        )}
-        <button
-          type="button"
-          aria-label={`Remove ${entry.name}`}
-          className={small}
-          disabled={busy}
-          onClick={onRemove}
-        >
-          Remove
-        </button>
+        </span>
       </div>
     </fieldset>
   )

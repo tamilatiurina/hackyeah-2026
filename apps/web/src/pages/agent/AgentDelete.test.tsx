@@ -6,7 +6,7 @@ import { renderApp } from '../../test/renderApp'
 
 async function open() {
   const user = userEvent.setup()
-  renderApp('/agents/agent-support')
+  renderApp('/agents/agent-support/connection')
   await screen.findByRole('heading', { level: 1, name: 'Support Assistant' })
   return user
 }
@@ -14,7 +14,7 @@ async function open() {
 describe('Delete agent', () => {
   it('asks for confirmation, deletes and returns to the list', async () => {
     const user = await open()
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete…' }))
     expect(screen.getByRole('button', { name: 'Confirm delete' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: 'Confirm delete' }))
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/agents'))
@@ -26,9 +26,9 @@ describe('Delete agent', () => {
 
   it('forgets the deleted agent so Back does not show it again', async () => {
     const user = userEvent.setup()
-    const { queryClient } = renderApp('/agents/agent-support')
+    const { queryClient } = renderApp('/agents/agent-support/connection')
     await screen.findByRole('heading', { level: 1, name: 'Support Assistant' })
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete…' }))
     await user.click(screen.getByRole('button', { name: 'Confirm delete' }))
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/agents'))
     await waitFor(() => expect(queryClient.getQueryData(['agents', 'agent-support'])).toBeUndefined())
@@ -36,20 +36,20 @@ describe('Delete agent', () => {
 
   it('keeps confirmation open when focus moves and provides an explicit cancel', async () => {
     const user = await open()
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete…' }))
     await user.tab()
     expect(screen.getByRole('button', { name: 'Confirm delete' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete…' })).toBeInTheDocument()
     expect(fakeApi.agents).toHaveLength(2)
   })
 
   it('says deleting is not available yet on a 405', async () => {
     fakeApi.agentsSupport.delete = false
     const user = await open()
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete…' }))
     await user.click(screen.getByRole('button', { name: 'Confirm delete' }))
     expect(await screen.findByText("Deleting agents isn't available on this API yet.")).toBeInTheDocument()
-    expect(screen.getByTestId('location').textContent).toBe('/agents/agent-support')
+    expect(screen.getByTestId('location').textContent).toBe('/agents/agent-support/connection')
   })
 })

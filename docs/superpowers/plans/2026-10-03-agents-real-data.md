@@ -14,7 +14,7 @@
 
 - pnpm only, inside `apps/web`; TypeScript only; no `any`; relative `/api/...` paths via `client.ts`.
 - Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. Missing either → sign-in page shows exactly: "Supabase isn't configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in apps/web/.env.local (make supabase writes them)."
-- Texts exactly: "Sign in to Guardrail Hub", "Your session expired. Sign in again.", "No agents yet. Register your first one.", "Couldn't load agents.", "Couldn't reach the upstream agent. Check the URL and that it answers GET requests.", "An agent with this name already exists" (from the API).
+- Texts exactly: "Sign in to AgentsOnRails.dev", "Your session expired. Sign in again.", "No agents yet. Register your first one.", "Couldn't load agents.", "Couldn't reach the upstream agent. Check the URL and that it answers GET requests.", "An agent with this name already exists" (from the API).
 - Test identities: demo email `demo@guardrail.local`, demo password `demo-password`, token `test-token`.
 - Conventional commits ending with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
 
@@ -213,7 +213,7 @@ describe('sign-in', () => {
     const user = userEvent.setup()
     renderApp('/guardrails', undefined, { signedIn: false })
     expect(location()).toBe('/sign-in')
-    expect(screen.getByRole('heading', { name: 'Sign in to Guardrail Hub' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sign in to AgentsOnRails.dev' })).toBeInTheDocument()
     await signIn(user)
     await waitFor(() => expect(location()).toBe('/guardrails'))
   })
@@ -575,7 +575,7 @@ export function SignInPage() {
         className="flex w-full max-w-sm flex-col gap-5 rounded-xl border border-line bg-surface p-6"
       >
         <h1 id="sign-in-title" className="m-0 text-xl font-semibold">
-          Sign in to Guardrail Hub
+          Sign in to AgentsOnRails.dev
         </h1>
         {state.notice && <p className="m-0 rounded-lg bg-warn-bg p-3 text-sm text-warn-fg">{state.notice}</p>}
         {!configured ? (

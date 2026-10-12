@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router'
+import { ToastProvider } from '../ui/Toast'
 import { Brand } from './Brand'
 import { Sidebar } from './Sidebar'
 
 const SIDEBAR_ID = 'app-sidebar'
 
-/** App shell: Sidebar on the left (drawer on phones) and the routed page in `<main>` via `<Outlet>`. Use as a parent route element. */
+/** App shell: Sidebar on the left (drawer on phones) and the routed page in `<main>` via `<Outlet>`, with toasts. Use as a parent route element. */
 export function Layout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
@@ -60,7 +61,9 @@ export function Layout() {
       )}
       <Sidebar id={SIDEBAR_ID} open={menuOpen} onNavigate={closeMenu} />
       <main ref={mainRef} id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-[clamp(16px,4vw,40px)] pt-8 pb-12 outline-none">
-        <Outlet />
+        <ToastProvider>
+          <Outlet />
+        </ToastProvider>
       </main>
     </div>
   )

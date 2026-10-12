@@ -17,10 +17,10 @@ export const WithAction = () => (
 export const WithLink = () => (
   <div className="bg-canvas p-6">
     <EmptyState
-      title="No incidents recorded"
+      title="No audit events yet"
       description={
         <>
-          Run a <a href="#" className="font-medium">scenario on the Playground</a> to see blocked tool calls show up here.
+          <a href="#" className="font-medium">Test an agent</a> to see blocks and redactions show up here.
         </>
       }
     />

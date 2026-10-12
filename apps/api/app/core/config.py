@@ -1,43 +1,10 @@
-import os
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _API_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _repo_root() -> Path:
-    """Repo root: two levels above the app package (app/core/config.py -> repo).
-
-    On Vercel the bundle is flat (/var/task/app/... with no apps/api level),
-    so walking up finds the filesystem root — the bundle root (/var/task) is
-    the repo root there, detected via the api/index.py entrypoint it always
-    contains.
-    """
-    if (vercel_task := Path("/var/task")).is_dir() and (vercel_task / "api" / "index.py").exists():
-        return vercel_task
-    if os.environ.get("VERCEL"):  # runtime flag; belt and suspenders for the path probe
-        return _API_ROOT  # the bundle root is the API project dir itself
-    # config.py is <repo>/apps/api/app/core/config.py:
-    # _API_ROOT = <repo>/apps/api, so the repo root is one level above it
-    return _API_ROOT.parents[1]
-
-
-_REPO_ROOT = _repo_root()
-
-
-def _default_state_dir() -> str:
-    """Local: the repo's .pi dir. Serverless (Vercel): /tmp/pi-state (writable).
-
-    Everything mutable — policy, incidents, sessions, sandbox config — lives
-    under one state dir, because serverless filesystems are read-only except
-    /tmp and wiped between cold starts. The repo seed policy is copied there
-    on first use (see app.pi_policy.state.ensure_state).
-    """
-    if Path("/tmp/.vercel").exists() or os.environ.get("VERCEL"):
-        return "/tmp/pi-state"
-    return str(_REPO_ROOT / ".pi")
 
 
 class Settings(BaseSettings):
@@ -51,38 +18,23 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
+    # Publishable/anon key only. SUPABASE_KEY wins; otherwise the names the Vercel Supabase
+    # integration syncs (and updates on key rotation) are used.
+    SUPABASE_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "SUPABASE_KEY", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY"
+        ),
+    )
+
+    # The shared demo agent every new account gets (POST /api/v1/me/bootstrap). Empty: the
+    # demo-agent service on the same domain as the request (root vercel.json, /demo-agent).
+    DEMO_AGENT_URL: str = ""
 
     # LLM judge engine (E-02). Without a key, llm_judge verdicts are simulated heuristics.
     ANTHROPIC_API_KEY: str = ""
     JUDGE_MODEL: str = "claude-haiku-4-5"
     JUDGE_TIMEOUT_S: float = 8.0
-
-    # pi control layer policy. POLICY_PATH anchors to the state dir (repo/.pi
-    # locally, /tmp/pi-state on Vercel); the seed policy lives in the repo and
-    # is copied into the state dir on first use.
-    POLICY_PATH: str = str(Path(_default_state_dir()) / "policy.json")
-    POLICY_SCHEMA_PATH: str = str(
-        _REPO_ROOT / "packages" / "pi-control-layer" / "policy.schema.json"
-    )
-    # vendored fallback (Vercel build copies packages/pi-control-layer into the
-    # project dir, because the repo packages dir is not part of the upload)
-    POLICY_SCHEMA_PATH_VERCEL: str = str(_API_ROOT / "pi-control-layer" / "policy.schema.json")
-    POLICY_MAX_BACKUPS: int = 10
-
-    # pi playground
-    REPO_ROOT: str = str(_REPO_ROOT)
-    # base URL the playground advertises for its served pages (the pi agent fetches it)
-    PLAYGROUND_BASE_URL: str = "http://127.0.0.1:8000"
-    INCIDENTS_PATH: str = str(Path(_default_state_dir()) / "incidents.json")
-    # where pi stores its session files (empty = pi's own default ~/.pi/agent/sessions;
-    # on Vercel this must point into the state dir because $HOME is not writable)
-    PI_SESSIONS_DIR: str = ""
-
-    # pi binary. Empty = shutil.which("pi") (local installs). On Vercel the build
-    # step installs the npm package under apps/api/node_modules and this points
-    # at its cli.js.
-    PI_COMMAND: str = ""
 
     # B-05 (FR-25, FR-26): limits the gateway enforces on every guarded call. A cap of 0
     # switches that limit off. Each one blocks or only warns when it is exceeded. Per-session

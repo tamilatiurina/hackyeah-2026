@@ -8,7 +8,7 @@ Backend counterpart: #34 (A-02). Contract: #29 (T-02, not landed). Date: 2026-10
 ## Goal
 
 Replace the `/agents` placeholder with the agents table, group filter and register form from the
-"Guardrail Hub Control Panel" prototype, backed by a mock API until the real one exists.
+"AgentsOnRails.dev Control Panel" prototype, backed by a mock API until the real one exists.
 
 ## Scope
 

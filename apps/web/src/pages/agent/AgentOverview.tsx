@@ -1,56 +1,216 @@
+import { Link } from 'react-router'
+import { useAuditEvents, useSessions } from '../../api/audit'
+import { useEffectiveGuardrails } from '../../api/bindings'
 import type { Agent } from '../../api/types'
+import { buttonPrimary, buttonSecondary } from '../../ui/classes'
+import { formatRelative, shortId } from '../../ui/format'
+import { useToast } from '../../ui/toastContext'
 import { cardSummary } from '../agents/agentDisplay'
+import type { WorkspaceCounts } from './AgentPage'
+import { GuardrailFlow } from './GuardrailFlow'
+import {
+  SETUP_STEPS,
+  STEP_CTA,
+  agentPath,
+  gatewayUrls,
+  type SetupProgress,
+  type SetupStep,
+} from './setupProgress'
+import { ActionBadge, ArrowLink, ChevronRight, StepGlyph, sectionCard, sectionText, sectionTitle, smallButton } from './workspaceUi'
+import { copyText, eventKind } from './workspace'
 
-const term = 'text-xs font-semibold tracking-[0.04em] text-muted uppercase'
-const value = 'm-0 text-sm'
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-export function AgentOverview({ agent }: { agent: Agent }) {
+const TITLES: Record<SetupStep, string> = {
+  connection: 'Connect the agent',
+  guardrails: 'Attach guardrails',
+  mcp: 'Choose MCP tools',
+  test: 'Test the guarded pipeline',
+  deploy: 'Go live',
+}
+
+const EVENT_LABELS = { block: 'Blocked', redact: 'Redacted', warn: 'Warned', limit: 'Limit' } as const
+
+interface AgentOverviewProps {
+  agent: Agent
+  progress: SetupProgress
+  counts: WorkspaceCounts
+}
+
+/** The workspace's landing section: the setup checklist, or once live the guarded URL and recent
+ * activity; always the order the guardrails run in. */
+export function AgentOverview({ agent, progress, counts }: AgentOverviewProps) {
+  const effective = useEffectiveGuardrails(agent.id)
   return (
-    <section aria-label="Overview" className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-      <dl className="m-0 grid gap-x-8 gap-y-4 sm:grid-cols-[12rem_1fr]">
-        <dt className={term}>Description</dt>
-        <dd className={value}>{agent.description || '—'}</dd>
-        <dt className={term}>Agent URL</dt>
-        <dd className={`${value} min-w-0 overflow-x-auto font-mono text-[13px] whitespace-nowrap`}>{agent.base_url}</dd>
-        <dt className={term}>A2A endpoint</dt>
-        <dd className={`${value} min-w-0 overflow-x-auto font-mono text-[13px] whitespace-nowrap`}>{agent.upstream_url}</dd>
-        <dt className={term}>Agent Card</dt>
-        <dd className={value}>
-          {agent.agent_card ? (
-            cardSummary(agent.agent_card)
-          ) : (
-            <span className="text-danger">
-              No Agent Card. This agent was registered before A2A; delete it and register it again.
-            </span>
-          )}
-        </dd>
-        {agent.agent_card && agent.agent_card.skills.length > 0 && (
-          <>
-            <dt className={term}>Skills</dt>
-            <dd className={value}>
-              <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-                {agent.agent_card.skills.map((skill) => (
-                  <li key={skill.id} title={skill.description} className="rounded-md bg-[#F0F0EB] px-2 py-0.5 text-[13px]">
-                    {skill.name}
-                  </li>
-                ))}
-              </ul>
-            </dd>
-          </>
+    <div className="flex flex-col gap-6">
+      {progress.live ? <LiveSummary agent={agent} /> : <Checklist agent={agent} progress={progress} counts={counts} />}
+
+      <section aria-labelledby="overview-order" className={sectionCard}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 id="overview-order" className={sectionTitle}>
+              Runs in this order
+            </h2>
+            <p className={sectionText}>Mandatory checks run first. Redacted text feeds the next check.</p>
+          </div>
+          <Link to={agentPath(agent.id, 'guardrails')} className={`${smallButton} no-underline`}>
+            Edit guardrails
+          </Link>
+        </div>
+        {effective.isPending ? (
+          <p className="m-0 text-sm text-muted">Loading guardrails…</p>
+        ) : effective.isError ? (
+          <p role="alert" className="m-0 text-sm text-danger">
+            Couldn't load this agent's guardrails.
+          </p>
+        ) : (
+          <GuardrailFlow agentName={agent.name} input={effective.data.input} output={effective.data.output} />
         )}
-        <dt className={term}>Auth header</dt>
-        <dd className={`${value} ${agent.auth_header_name ? 'font-mono text-[13px]' : 'text-muted'}`}>
-          {agent.auth_header_name ?? 'None'}
-        </dd>
-        <dt className={term}>ID</dt>
-        <dd className={`${value} font-mono text-[13px] break-all`}>{agent.id}</dd>
-        {agent.config_version !== undefined && (
-          <>
-            <dt className={term}>Config version</dt>
-            <dd className={value}>{agent.config_version}</dd>
-          </>
-        )}
-      </dl>
+      </section>
+    </div>
+  )
+}
+
+function Checklist({ agent, progress, counts }: AgentOverviewProps) {
+  const descriptions: Record<SetupStep, string> = {
+    connection: `Agent Card ${cardSummary(agent.agent_card)} read from ${agent.base_url}`,
+    guardrails: counts.attached
+      ? `${plural(counts.attached, 'guardrail')} attached, running after ${counts.mandatory} mandatory`
+      : progress.done.guardrails
+        ? 'Mandatory only. Nothing attached to this agent.'
+        : 'Choose checks from the library. The mandatory ones already run.',
+    mcp: counts.mcpServers
+      ? `${plural(counts.mcpServers, 'server')}, ${plural(counts.allowedTools, 'tool')} allowed`
+      : progress.done.mcp
+        ? 'Skipped. The agent runs without tools.'
+        : 'Grant tool servers and pick which tools the agent may call.',
+    test: agent.tested
+      ? 'Sent through the guarded pipeline and checked the trace.'
+      : 'Send scenarios through the guarded pipeline and read the per-rule trace.',
+    deploy: 'Create a gateway key and switch callers to the guarded URL.',
+  }
+  return (
+    <section aria-labelledby="checklist-title" className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5">
+        <div className="flex flex-col gap-1">
+          <h2 id="checklist-title" className={sectionTitle}>
+            Get {agent.name} ready for callers
+          </h2>
+          <p className="m-0 text-sm text-muted">Work top to bottom, or open any step. Nothing here is locked.</p>
+        </div>
+        <span className="text-[13px] font-semibold text-muted">
+          {progress.doneCount} of {SETUP_STEPS.length} done
+        </span>
+      </div>
+      <ol className="m-0 list-none p-0">
+        {SETUP_STEPS.map((step, index) => {
+          const done = progress.done[step]
+          const isNext = progress.next === step
+          return (
+            <li
+              key={step}
+              className={`flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-line px-6 py-4 ${isNext ? 'bg-[#F5FAF8]' : ''}`}
+            >
+              <StepGlyph state={done ? 'done' : isNext ? 'next' : 'todo'} n={index + 1} size={26} />
+              <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-0.5">
+                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                  {TITLES[step]}
+                  {step === 'mcp' && !done && (
+                    <span className="rounded-md bg-[#F0F0EB] px-2 py-px text-[11px] text-[#30343B]">Optional</span>
+                  )}
+                  {isNext && <span className="rounded-md bg-teal-soft px-2 py-px text-[11px] text-teal-dark">Next</span>}
+                </span>
+                <span className="text-[13px] leading-5 break-words text-muted">{descriptions[step]}</span>
+              </div>
+              <Link
+                to={agentPath(agent.id, step)}
+                className={`${isNext ? buttonPrimary : buttonSecondary} min-h-10 px-3.5 text-[13px] no-underline ${
+                  isNext ? 'hover:text-white' : 'hover:text-ink'
+                }`}
+              >
+                {isNext ? STEP_CTA[step] : done ? 'Review' : 'Open'}
+                {isNext && <ChevronRight />}
+              </Link>
+            </li>
+          )
+        })}
+      </ol>
     </section>
+  )
+}
+
+function LiveSummary({ agent }: { agent: Agent }) {
+  const toast = useToast()
+  const sessions = useSessions({ agent_id: agent.id })
+  const events = useAuditEvents({ agent_id: agent.id })
+  const sessionList = sessions.data?.pages.flatMap((p) => p.data) ?? []
+  const eventList = events.data?.pages.flatMap((p) => p.data) ?? []
+  const count = (action: string) => eventList.filter((e) => e.kind === 'guardrail' && e.action === action).length
+  const stats = [
+    { label: 'Sessions', value: sessionList.length },
+    { label: 'Blocked', value: count('block') },
+    { label: 'Redacted', value: count('redact') },
+    { label: 'Warned', value: count('warn') },
+  ]
+  const url = gatewayUrls(agent.id).gateway
+  return (
+    <>
+      <section aria-label="Guarded URL" className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-line bg-surface px-6 py-5">
+        <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1.5">
+          <span className="text-xs font-semibold tracking-[0.04em] text-muted uppercase">Guarded URL</span>
+          <code className="block overflow-x-auto rounded-md bg-canvas px-2.5 py-1.5 text-[13px] whitespace-nowrap">{url}</code>
+          <span className="text-[13px] text-muted">
+            Callers send a gateway key in the <code className="text-xs">X-API-Key</code> header.
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={buttonSecondary} onClick={() => void copyText(url, 'Guarded URL', toast)}>
+            Copy
+          </button>
+          <Link to={agentPath(agent.id, 'deploy')} className={`${buttonSecondary} no-underline hover:text-ink`}>
+            Manage keys
+          </Link>
+        </div>
+      </section>
+
+      <section aria-labelledby="overview-activity" className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5 pb-4">
+          <h2 id="overview-activity" className={sectionTitle}>
+            Recent activity
+          </h2>
+          <ArrowLink to={agentPath(agent.id, 'activity')}>All activity</ArrowLink>
+        </div>
+        <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] border-t border-line">
+          {stats.map((s) => (
+            <div key={s.label} className="flex flex-col gap-0.5 border-r border-line px-6 py-4 last:border-r-0">
+              <dt className="text-xs font-semibold tracking-[0.04em] text-muted uppercase">{s.label}</dt>
+              <dd className="m-0 text-2xl font-semibold tracking-[-0.02em]">{s.value}</dd>
+            </div>
+          ))}
+        </dl>
+        {eventList.length === 0 ? (
+          <p className="m-0 border-t border-line px-6 py-4 text-sm text-muted">No blocks, redactions or warnings yet.</p>
+        ) : (
+          <ul className="m-0 list-none p-0">
+            {eventList.slice(0, 3).map((e) => {
+              const kind = eventKind(e)
+              return (
+                <li key={e.id} className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-line px-6 py-3 text-[13px]">
+                  <span className="w-[76px] text-muted">{formatRelative(e.at)}</span>
+                  <ActionBadge action={kind}>{EVENT_LABELS[kind]}</ActionBadge>
+                  <span className="font-semibold">{e.rule_name}</span>
+                  <span className="min-w-0 flex-[1_1_200px] text-muted">{e.details}</span>
+                  {e.context_id && (
+                    <code className="text-xs text-muted" title={e.context_id}>
+                      {shortId(e.context_id)}
+                    </code>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+    </>
   )
 }

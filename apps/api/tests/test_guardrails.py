@@ -166,14 +166,11 @@ def test_get_one_and_unknown() -> None:
 
 
 def test_patch_changes_only_the_fields_sent() -> None:
-    admin = {"X-Role": "admin"}
-    r = client.patch(f"{BASE}/guardrails/gr-pii", json={"enabled": False}, headers=admin)
+    r = client.patch(f"{BASE}/guardrails/gr-pii", json={"enabled": False})
     assert r.status_code == 200
     assert r.json()["enabled"] is False
     assert r.json()["name"] == "PII redaction"
-    cleared = client.patch(
-        f"{BASE}/guardrails/gr-pii", json={"description": None}, headers=admin
-    ).json()
+    cleared = client.patch(f"{BASE}/guardrails/gr-pii", json={"description": None}).json()
     assert cleared["description"] is None
     assert cleared["enabled"] is False
 
@@ -189,8 +186,7 @@ def test_patch_unknown_is_404() -> None:
 
 
 def test_delete_then_gone() -> None:
-    admin = {"X-Role": "admin"}
-    assert client.delete(f"{BASE}/guardrails/gr-pii", headers=admin).status_code == 204
+    assert client.delete(f"{BASE}/guardrails/gr-pii").status_code == 204
     assert client.get(f"{BASE}/guardrails/gr-pii").status_code == 404
     assert client.delete(f"{BASE}/guardrails/gr-pii").status_code == 404
 

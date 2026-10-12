@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteJson, getJson, patchJson, postJson } from './client'
-import type { Agent, AgentList, AgentRegistration, AgentUpdate, GatewayKey } from './types'
+import type { Agent, AgentList, AgentRegistration, AgentUpdate, GatewayKey, ReviewableStep } from './types'
 
 export const agentKeys = {
   agents: ['agents'] as const,
@@ -32,15 +32,36 @@ export function useRegisterAgent() {
   })
 }
 
-export function useUpdateAgent(id: string) {
+/** Puts a changed agent into both the detail and the list cache. */
+function useStoreAgent() {
   const queryClient = useQueryClient()
+  return (id: string, update: (agent: Agent) => Agent) => {
+    queryClient.setQueryData<Agent>(agentKeys.agent(id), (old) => (old ? update(old) : old))
+    queryClient.setQueryData<Agent[]>(agentKeys.agents, (old) => old?.map((a) => (a.id === id ? update(a) : a)))
+  }
+}
+
+export function useUpdateAgent(id: string) {
+  const store = useStoreAgent()
   return useMutation({
     mutationFn: (changes: AgentUpdate) => patchJson<Agent>(`/agents/${enc(id)}`, changes),
-    onSuccess: (agent) => {
-      queryClient.setQueryData(agentKeys.agent(id), agent)
-      queryClient.setQueryData<Agent[]>(agentKeys.agents, (old) => old?.map((a) => (a.id === agent.id ? agent : a)))
-    },
+    onSuccess: (agent) => store(id, () => agent),
   })
+}
+
+/** Marks a setup step finished without attaching anything; the config version stays the same. */
+export function useCompleteSetupStep(id: string) {
+  const store = useStoreAgent()
+  return useMutation({
+    mutationFn: (step: ReviewableStep) => postJson<Agent>(`/agents/${enc(id)}/setup/${step}`, {}),
+    onSuccess: (agent) => store(id, () => agent),
+  })
+}
+
+/** The test chat completed the Test step on the server; mirror it without a refetch. */
+export function useMarkTested(id: string) {
+  const store = useStoreAgent()
+  return () => store(id, (agent) => (agent.tested ? agent : { ...agent, tested: true }))
 }
 
 export function useDeleteAgent() {
@@ -54,7 +75,20 @@ export function useDeleteAgent() {
   })
 }
 
-/** Creates the agent's gateway key, replacing any previous one. */
+/** Creates the agent's gateway key, replacing (rotating) any previous one. The agent goes live. */
 export function useCreateGatewayKey(id: string) {
-  return useMutation({ mutationFn: () => postJson<GatewayKey>(`/agents/${enc(id)}/gateway-key`, {}) })
+  const store = useStoreAgent()
+  return useMutation({
+    mutationFn: () => postJson<GatewayKey>(`/agents/${enc(id)}/gateway-key`, {}),
+    onSuccess: () => store(id, (agent) => ({ ...agent, has_gateway_key: true })),
+  })
+}
+
+/** Revokes the gateway key: the guarded URL answers 401 until a new key is created. */
+export function useRevokeGatewayKey(id: string) {
+  const store = useStoreAgent()
+  return useMutation({
+    mutationFn: () => deleteJson(`/agents/${enc(id)}/gateway-key`),
+    onSuccess: () => store(id, (agent) => ({ ...agent, has_gateway_key: false })),
+  })
 }

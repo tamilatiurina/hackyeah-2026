@@ -1,23 +1,22 @@
 """FR-17: which registered MCP servers, and which of their tools, each agent may use.
 
 Storage follows app/mcp/repository.py: Supabase as the signed-in user (RLS: only the agent's
-owner sees or changes its access; see the mcp_agent_access migration), or memory without
-Supabase. The gateway has no signed-in user, so it reads an agent's access through a database
-function that checks the gateway key; the test chat reads it as the owner.
+owner sees or changes its access, and only with their own servers). The gateway has no
+signed-in user, so it reads an agent's access through a database function that checks the
+gateway key; the test chat reads it as the owner.
 """
 
 import logging
 from collections import Counter
 from collections.abc import Callable
-from typing import Annotated, Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 import httpx
-from app.core.supabase import get_supabase, get_supabase_for_user
+from app.core.auth import Me
+from app.core.supabase import get_supabase
 from app.gateway.keys import hash_key
 from app.mcp.models import AgentMcpServer, McpGrant, McpServer
-from app.mcp.repository import ACCESS, InMemoryMcpServerRepository, supabase_configured
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, status
 from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
@@ -27,7 +26,6 @@ TABLE = "agent_mcp_servers"
 Tools = list[str]  # a module-level alias: `list` is also a method name in the classes below
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
-_bearer = HTTPBearer(auto_error=False)
 
 
 class AgentNotFoundError(Exception):
@@ -56,26 +54,6 @@ def _entry(server: McpServer, allowed: Tools) -> AgentMcpServer:
         available_tools=list(server.allowed_tools),
         allowed_tools=list(allowed),
     )
-
-
-class InMemoryAgentMcpRepository:
-    def list(self, agent_id: str) -> list[AgentMcpServer]:
-        servers = {s.id: s for s in InMemoryMcpServerRepository().list()}
-        return [
-            _entry(servers[server_id], tools)
-            for (agent, server_id), tools in ACCESS.items()
-            if agent == agent_id and server_id in servers
-        ]
-
-    def put(self, agent_id: str, server: McpServer, tools: Tools) -> AgentMcpServer:
-        ACCESS[(agent_id, server.id)] = list(tools)
-        return _entry(server, tools)
-
-    def delete(self, agent_id: str, server_id: str) -> bool:
-        return ACCESS.pop((agent_id, server_id), None) is not None
-
-    def counts(self) -> dict[str, int]:
-        return dict(Counter(server_id for _, server_id in ACCESS))
 
 
 class SupabaseAgentMcpRepository:
@@ -153,19 +131,9 @@ class SupabaseAgentMcpRepository:
         return dict(Counter(row["server_id"] for row in response.data))
 
 
-def get_agent_mcp_repository(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-) -> AgentMcpRepository:
-    """FastAPI dependency: the signed-in user's Supabase view, or memory without Supabase."""
-    if not supabase_configured():
-        return InMemoryAgentMcpRepository()
-    if credentials is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "Sign in to manage MCP access",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return SupabaseAgentMcpRepository(get_supabase_for_user(credentials.credentials))
+def get_agent_mcp_repository(user: Me) -> AgentMcpRepository:
+    """FastAPI dependency: the signed-in user's agents' MCP access."""
+    return SupabaseAgentMcpRepository(user.client)
 
 
 # --- what the agent is told on each call ------------------------------------------------------
@@ -186,15 +154,6 @@ def parse_grants(data: Any) -> list[McpGrant]:
         except ValidationError:
             logger.warning("Skipping an invalid MCP grant: %r", item)
     return grants
-
-
-class InMemoryMcpGrantLoader:
-    def load(self, agent_id: str, key: str | None) -> list[McpGrant]:
-        del key  # the caller is already authenticated
-        return [
-            McpGrant(id=e.server_id, name=e.name, url=e.url, allowed_tools=e.allowed_tools)
-            for e in InMemoryAgentMcpRepository().list(agent_id)
-        ]
 
 
 class GatewayMcpGrantLoader:
@@ -223,8 +182,6 @@ class OwnerMcpGrantLoader:
 
 
 def get_gateway_mcp_loader() -> McpGrantLoader:
-    if not supabase_configured():
-        return InMemoryMcpGrantLoader()
     try:
         return GatewayMcpGrantLoader(get_supabase())
     except RuntimeError as error:

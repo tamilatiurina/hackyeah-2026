@@ -2,19 +2,14 @@ import socket
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address, ip_address
-from typing import Annotated
 
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import HttpUrl
-from supabase_auth.errors import AuthApiError
 
-from app.core.supabase import get_supabase_for_user
+from app.core.auth import Me
 from supabase import Client
-
-_bearer = HTTPBearer()
 
 
 @dataclass(frozen=True)
@@ -32,31 +27,9 @@ class ResolvedUpstream:
     sni_hostname: str
 
 
-def get_agent_database(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
-) -> AgentDatabase:
-    token = credentials.credentials
-    try:
-        client = get_supabase_for_user(token)
-    except RuntimeError as error:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database is not configured",
-        ) from error
-    try:
-        response = client.auth.get_user(token)
-    except AuthApiError as error:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Supabase access token",
-        ) from error
-    user = response.user if response is not None else None
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Supabase access token",
-        )
-    return AgentDatabase(client=client, owner_id=str(user.id))
+def get_agent_database(user: Me) -> AgentDatabase:
+    """The signed-in user's agents: their own Supabase client and their id as the owner."""
+    return AgentDatabase(client=user.client, owner_id=user.id)
 
 
 async def ensure_public_upstream(url: HttpUrl) -> ResolvedUpstream:

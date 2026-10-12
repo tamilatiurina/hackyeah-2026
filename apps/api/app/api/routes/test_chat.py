@@ -2,30 +2,32 @@
 
 The signed-in owner sends an A2A SendMessage call. It goes through the same guarded path as
 the agent's guarded URL (app.gateway.service): input guardrails, the agent, output guardrails.
-The answer is the A2A reply with metadata.guardrailHub holding the full trace, the token usage,
+The answer is the A2A reply with metadata.agentsOnRails holding the full trace, the token usage,
 the limits used and the evaluator scores. The turn is counted in the session (A-07) and every
 block, redaction and warning goes to the audit log, recorded as the signed-in owner.
 
 One contextId per chat: the panel sends it; if it is missing, one is created and returned.
 """
 
+import contextlib
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
+from postgrest.exceptions import APIError
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.deps import get_role
 from app.api.routes.agents.deps import AgentDatabase, get_agent_database
 from app.api.routes.agents.target import load_upstream_target
-from app.audit.recorder import AuditRecorder, InMemoryAuditRecorder, OwnerAuditRecorder
+from app.audit.recorder import AuditRecorder, OwnerAuditRecorder
 from app.bindings.repository import BindingRepository, get_binding_repository
 from app.bindings.resolve import resolve_for_request
-from app.core.config import settings
 from app.gateway import a2a, limits
 from app.gateway.pipeline import GuardrailEngine
+from app.gateway.policy import read_role
 from app.gateway.service import (
     Audit,
     GuardedReply,
@@ -34,12 +36,7 @@ from app.gateway.service import (
     send_guarded,
 )
 from app.guardrails.repository import GuardrailRepository, get_guardrail_repository
-from app.mcp.agent_access import (
-    InMemoryMcpGrantLoader,
-    McpGrantLoader,
-    OwnerMcpGrantLoader,
-    load_grants,
-)
+from app.mcp.agent_access import McpGrantLoader, OwnerMcpGrantLoader, load_grants
 
 router = APIRouter(prefix="/agents", tags=["test chat"])
 
@@ -47,19 +44,15 @@ router = APIRouter(prefix="/agents", tags=["test chat"])
 def get_test_chat_recorder(
     database: Annotated[AgentDatabase, Depends(get_agent_database)],
 ) -> AuditRecorder:
-    """Audit as the signed-in owner (their own Supabase client); in memory without Supabase."""
-    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-        return OwnerAuditRecorder(database.client)
-    return InMemoryAuditRecorder()
+    """Audit as the signed-in owner (their own Supabase client)."""
+    return OwnerAuditRecorder(database.client)
 
 
 def get_test_chat_mcp_loader(
     database: Annotated[AgentDatabase, Depends(get_agent_database)],
 ) -> McpGrantLoader:
-    """FR-17: the agent's MCP access, read as the signed-in owner; in memory without Supabase."""
-    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-        return OwnerMcpGrantLoader(database.client)
-    return InMemoryMcpGrantLoader()
+    """FR-17: the agent's MCP access, read as the signed-in owner."""
+    return OwnerMcpGrantLoader(database.client)
 
 
 # --- the A2A 1.0 subset the panel sends and reads (docs/agent-contract-a2a.md) -------------
@@ -127,7 +120,7 @@ class EvaluatorScore(BaseModel):
     score: float
 
 
-class GuardrailHubMetadata(BaseModel):
+class AgentsOnRailsMetadata(BaseModel):
     policyVersion: str | None = Field(
         default=None, description="Hash of the resolved guardrail set; changes on config edits"
     )
@@ -143,7 +136,7 @@ class GuardrailHubMetadata(BaseModel):
 
 
 class ReplyMetadata(_A2AModel):
-    guardrailHub: GuardrailHubMetadata | None = None
+    agentsOnRails: AgentsOnRailsMetadata | None = None
 
 
 class ReplyMessage(A2AMessage):
@@ -213,7 +206,6 @@ async def send_test_chat_message(
     database: Annotated[AgentDatabase, Depends(get_agent_database)],
     guardrails: Annotated[GuardrailRepository, Depends(get_guardrail_repository)],
     bindings: Annotated[BindingRepository, Depends(get_binding_repository)],
-    role: Annotated[str | None, Depends(get_role)],
     engine: Annotated[GuardrailEngine, Depends(get_guardrail_engine)],
     client: Annotated[httpx.AsyncClient, Depends(get_gateway_http_client)],
     recorder: Annotated[AuditRecorder, Depends(get_test_chat_recorder)],
@@ -225,8 +217,10 @@ async def send_test_chat_message(
     message: a2a.Json = call["params"]["message"]
     message.setdefault("contextId", f"ctx-{uuid4()}")  # one contextId per chat
 
-    # The test chat knows who is asking: the panel's role (X-Role) and the signed-in user, so
-    # role and user bindings apply, resolved exactly like GET /effective-guardrails.
+    # The test chat knows who is asking: the signed-in owner, so their user bindings apply. A
+    # caller role in params.metadata.agentsOnRails.role selects role bindings, as on the guarded
+    # URL. Resolved exactly like GET /effective-guardrails.
+    role, _ = read_role(call)
     policy = await run_in_threadpool(
         resolve_for_request, guardrails, bindings, str(agent_id), role, database.owner_id
     )
@@ -254,4 +248,13 @@ async def send_test_chat_message(
         hub["limits"] = reply.limits
         hub["scores"] = []  # FR-28 evaluators are not wired in yet
         a2a.add_hub_metadata(result, hub)
+        await run_in_threadpool(_mark_tested, database, agent_id)
     return ChatResponse.model_validate(answer)
+
+
+def _mark_tested(database: AgentDatabase, agent_id: UUID) -> None:
+    """Completes the agent's Test setup step. Progress only: a failure never fails the chat."""
+    with contextlib.suppress(APIError, httpx.HTTPError):
+        database.client.table("agents").update({"tested_at": datetime.now(UTC).isoformat()}).eq(
+            "id", str(agent_id)
+        ).execute()

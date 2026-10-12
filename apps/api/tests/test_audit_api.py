@@ -2,10 +2,9 @@
 
 import pytest
 from app.audit.models import AuditEventIn
-from app.audit.recorder import InMemoryAuditRecorder
-from app.core.config import settings
 from app.main import app
 from fastapi.testclient import TestClient
+from tests.fakes import InMemoryAuditRecorder
 
 client = TestClient(app)
 SUPPORT = "7b4eb987-4315-4745-83c7-258061f2f2c4"
@@ -123,10 +122,3 @@ def test_session_filters_and_paging(events: None) -> None:
         "/api/v1/sessions", params={"limit": 2, "before": first["next_cursor"]}
     ).json()
     assert len(first["data"]) == 2 and len(rest["data"]) == 1 and rest["next_cursor"] is None
-
-
-def test_needs_a_token_with_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "SUPABASE_URL", "https://example.supabase.co")
-    monkeypatch.setattr(settings, "SUPABASE_KEY", "publishable")
-    for path in ("/api/v1/audit-events", "/api/v1/audit-events/rules", "/api/v1/sessions"):
-        assert client.get(path).status_code == 401

@@ -2,7 +2,7 @@ interface BrandProps {
   subtitle?: string
 }
 
-/** Guardrail Hub logo lockup (shield mark, name, subtitle). White text: place it on the dark sidebar. */
+/** AgentsOnRails.dev logo lockup (shield mark, name, subtitle). White text: place it on the dark sidebar. */
 export function Brand({ subtitle = 'Acme workspace' }: BrandProps) {
   return (
     <div className="flex items-center gap-2.5 px-2">
@@ -22,7 +22,7 @@ export function Brand({ subtitle = 'Acme workspace' }: BrandProps) {
         <path d="M9 12l2 2 4-4" />
       </svg>
       <div className="flex flex-col">
-        <span className="text-base font-bold text-white">Guardrail Hub</span>
+        <span className="text-base font-bold text-white">AgentsOnRails.dev</span>
         <span className="text-xs text-sidebar-subtle">{subtitle}</span>
       </div>
     </div>

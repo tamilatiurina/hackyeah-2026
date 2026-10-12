@@ -11,7 +11,14 @@ type HeaderMode = 'keep' | 'replace' | 'remove' | 'none' | 'add'
 const EDIT_UNAVAILABLE = "Editing agents isn't available on this API yet."
 const card = 'flex flex-col gap-5 rounded-xl border border-line bg-surface p-5 sm:p-6'
 
-export function EditAgentForm({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+interface EditAgentFormProps {
+  agent: Agent
+  onClose: () => void
+  /** Called after a change was saved (not when nothing changed). */
+  onSaved?: (agent: Agent) => void
+}
+
+export function EditAgentForm({ agent, onClose, onSaved }: EditAgentFormProps) {
   const hasHeader = agent.auth_header_name !== null
   const [values, setValues] = useState<AgentFieldValues>({
     name: agent.name,
@@ -63,7 +70,10 @@ export function EditAgentForm({ agent, onClose }: { agent: Agent; onClose: () =>
     }
 
     update.mutate(changes, {
-      onSuccess: onClose,
+      onSuccess: (saved) => {
+        onSaved?.(saved)
+        onClose()
+      },
       onError: (error) => {
         if (error instanceof ApiError && error.status === 409) setErrors({ name: error.message })
         else if (error instanceof ApiError && error.status === 502) setFormError(error.message)
@@ -88,9 +98,14 @@ export function EditAgentForm({ agent, onClose }: { agent: Agent; onClose: () =>
 
   return (
     <form onSubmit={submit} noValidate aria-labelledby="edit-agent-title" className={card}>
-      <h2 id="edit-agent-title" className="m-0 text-lg font-semibold">
-        Edit agent
-      </h2>
+      <div className="flex flex-col gap-1">
+        <h2 id="edit-agent-title" className="m-0 text-lg font-semibold">
+          Edit connection
+        </h2>
+        <p className="m-0 text-sm text-muted">
+          Saving bumps the config version. Running sessions pick it up on their next call.
+        </p>
+      </div>
 
       <AgentFields idPrefix="edit" values={values} errors={errors} onChange={change} nameRef={nameRef} />
 

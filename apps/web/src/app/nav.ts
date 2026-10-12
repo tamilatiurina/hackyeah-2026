@@ -1,42 +1,20 @@
-import type { Role } from './role'
-import type { Mode } from './mode'
-
 export interface NavItem {
   path: string
   label: string
   title: string
+  // the sidebar starts a labelled group at the first item of each section
+  section?: string
 }
 
-// Agent Wrapped (panel) mode: the control room pages.
-// Note: /policies lives only in agent mode; there is a redirect for stray deep links.
-export const PANEL_NAV_ITEMS: readonly NavItem[] = [
-  { path: '/sessions', label: 'Sessions', title: 'Sessions' },
+// Agents first, then the shared library each agent picks from, then cross-agent monitoring.
+// Testing an agent lives in its own workspace (/agents/:id/test).
+export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/agents', label: 'Agents', title: 'Agents' },
-  { path: '/guardrails', label: 'Guardrails', title: 'Guardrails' },
-  { path: '/audit', label: 'Audit log', title: 'Audit log' },
-  { path: '/mcp', label: 'MCP servers', title: 'MCP servers' },
-  { path: '/test', label: 'Test chat', title: 'Test chat' },
-  { path: '/security', label: 'Security', title: 'Security scan' },
+  { path: '/guardrails', label: 'Guardrails', title: 'Guardrails', section: 'Library' },
+  { path: '/mcp', label: 'MCP servers', title: 'MCP servers', section: 'Library' },
+  { path: '/sessions', label: 'Sessions', title: 'Sessions', section: 'Monitor' },
+  { path: '/audit', label: 'Audit log', title: 'Audit log', section: 'Monitor' },
+  { path: '/security', label: 'Security', title: 'Security scan', section: 'Monitor' },
 ]
 
-// Agent Integrated mode: the pi agent harness integration.
-export const AGENT_NAV_ITEMS: readonly NavItem[] = [
-  { path: '/playground', label: 'Playground', title: 'Playground' },
-  { path: '/policies', label: 'Policies', title: 'Policies' },
-  { path: '/incidents', label: 'Incidents', title: 'Incidents' },
-  { path: '/pi-sessions', label: 'Sessions', title: 'Sessions' },
-]
-
-export const TESTER_HOME = '/test'
-export const DEFAULT_HOME = '/sessions'
-export const AGENT_HOME = '/playground'
-
-export function homeFor(role: Role, mode: Mode): string {
-  if (mode === 'agent') return AGENT_HOME
-  return role === 'tester' ? TESTER_HOME : DEFAULT_HOME
-}
-
-export function navItemsFor(role: Role, mode: Mode): readonly NavItem[] {
-  if (mode === 'agent') return AGENT_NAV_ITEMS
-  return role === 'tester' ? PANEL_NAV_ITEMS.filter((item) => item.path === TESTER_HOME) : PANEL_NAV_ITEMS
-}
+export const DEFAULT_HOME = '/agents'

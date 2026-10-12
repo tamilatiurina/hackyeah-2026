@@ -74,9 +74,4 @@ describe('Sessions', () => {
     renderApp('/sessions')
     expect(await screen.findByText("The audit API isn't available on this server yet (A-07).")).toBeInTheDocument()
   })
-
-  it('is not available to testers', () => {
-    renderApp('/sessions', 'tester')
-    expect(screen.getByTestId('location').textContent).toBe('/test')
-  })
 })

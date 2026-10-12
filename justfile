@@ -26,9 +26,6 @@ cli:
 test-agent:
     uv run acme-test-agent
 
-seed-sandbox:
-    cd apps/api && uv run python -m app.pi_policy.playground
-
 lint:
     uv run ruff check .
     uv run ruff format --check .

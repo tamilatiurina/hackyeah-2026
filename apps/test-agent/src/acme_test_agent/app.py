@@ -1,4 +1,4 @@
-"""A deterministic, stateless A2A 1.0 agent for testing Guardrail Hub.
+"""A deterministic, stateless A2A 1.0 agent for testing AgentsOnRails.dev.
 
 Implements the hub's A2A profile (docs/agent-contract-a2a.md): an Agent Card at
 ``/.well-known/agent-card.json`` and the JSON-RPC ``SendMessage`` method at ``/a2a``. Nothing
@@ -164,7 +164,7 @@ def split_parts(message: Message) -> tuple[str, list[tuple[str, str]]]:
     for part in message.parts:
         if part.text is None:
             continue
-        kind = (part.metadata or {}).get("guardrailHub")
+        kind = (part.metadata or {}).get("agentsOnRails")
         if isinstance(kind, str):
             hub.append((kind, part.text))
         else:

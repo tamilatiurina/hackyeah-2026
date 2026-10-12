@@ -10,8 +10,6 @@ import { FlagReply } from './FlagReply'
 import { TracePanel } from './TracePanel'
 
 const CHIPS = ['#pii', '#secret', '#inject', '#toxic', '#offtopic']
-const SIMULATED =
-  "Simulated: the test chat endpoint (B-06) isn't on this API yet. Replies and guardrail results are generated in the browser and don't reach the agent."
 
 const VERDICTS: Record<Verdict, { label: string; className: string }> = {
   passed: { label: 'Passed', className: 'bg-teal-soft text-teal-dark' },
@@ -56,7 +54,6 @@ export function TestChatPage() {
 
   const pending = turns.some((t) => t.status === 'pending')
   const canSend = Boolean(agentId) && !pending
-  const simulating = turns.some((t) => t.reply?.simulated)
 
   const updateTurn = (id: string, forContext: string, changes: Partial<Turn>) => {
     if (forContext !== currentContext.current) return // a late answer for a chat that was reset
@@ -167,10 +164,6 @@ export function TestChatPage() {
                 </div>
               </div>
             </section>
-
-            {simulating && (
-              <p className="m-0 rounded-lg bg-warn-bg p-3 text-sm text-warn-fg">{SIMULATED}</p>
-            )}
 
             <ol
               ref={conversationRef}
@@ -290,7 +283,6 @@ function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled, ag
             {errorText && <p className="m-0 text-sm text-danger">{errorText}</p>}
             <div className="flex flex-wrap items-center gap-2">
               {verdict && <span className={`${badgeClass} ${verdict.className}`}>{verdict.label}</span>}
-              {reply?.simulated && <span className={`${badgeClass} bg-canvas text-muted`}>Simulated</span>}
               {reply && (
                 <button
                   type="button"
@@ -302,7 +294,7 @@ function TurnView({ turn, number, selected, onSelect, onRetry, retryDisabled, ag
                   Inspect
                 </button>
               )}
-              {reply && reply.verdict !== 'error' && !reply.simulated && (
+              {reply && reply.verdict !== 'error' && (
                 <FlagReply
                   agentId={agentId}
                   contextId={turn.contextId}

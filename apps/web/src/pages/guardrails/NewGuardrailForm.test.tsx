@@ -53,7 +53,7 @@ describe('New guardrail', () => {
     expect(actionOptions()).toEqual(['Block', 'Redact', 'Warn'])
     await user.click(screen.getByRole('button', { name: 'Prompt injection' }))
     expect(actionOptions()).toEqual(['Block', 'Warn'])
-    expect(screen.getByText('Uses the company injection signatures below.')).toBeInTheDocument()
+    expect(screen.getByText('Uses your injection signatures below.')).toBeInTheDocument()
   })
 
   it('resets an incompatible template and action when the engine changes', async () => {

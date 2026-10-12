@@ -22,8 +22,7 @@ from app.bindings.models import EffectiveGuardrail, Source
 from app.gateway.a2a import Json, checked_text, text_parts
 from app.guardrails.evaluate import GuardrailContext, evaluate
 from app.guardrails.judge import Judge
-from app.guardrails.models import DryRunResult, Engine, Guardrail, Stage
-from app.store import store
+from app.guardrails.models import DryRunResult, Engine, Guardrail, InjectionSignature, Stage
 
 Verdict = Literal["pass", "block", "redact", "warn"]
 
@@ -42,10 +41,14 @@ class GuardrailEngine(Protocol):
 
 class LocalEngine:
     """The dry-run checks: regex, PII, signatures and moderation keywords are real; the LLM judge
-    is real when a judge is given, otherwise it is a heuristic and says so with simulated=True."""
+    is real when a judge is given, otherwise it is a heuristic and says so with simulated=True.
+    `signatures` are the agent owner's injection signatures (prompt_injection template)."""
 
-    def __init__(self, judge: Judge | None = None) -> None:
+    def __init__(
+        self, judge: Judge | None = None, signatures: Sequence[InjectionSignature] = ()
+    ) -> None:
         self._judge = judge
+        self._signatures = list(signatures)
 
     def check(
         self,
@@ -57,7 +60,7 @@ class LocalEngine:
         return evaluate(
             guardrail,
             text,
-            list(store.signatures.values()),
+            self._signatures,
             context=context,
             judge=self._judge,
         )

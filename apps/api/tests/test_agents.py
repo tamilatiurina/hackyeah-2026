@@ -128,6 +128,10 @@ def test_register_agent_reads_the_agent_card_and_hides_auth_value() -> None:
         "auth_header_name": "Authorization",
         "agent_card": _card(),
         "config_version": 1,
+        "has_gateway_key": False,
+        "guardrails_reviewed": False,
+        "mcp_reviewed": False,
+        "tested": False,
     }
     database_client.table.assert_called_once_with("agents")
     database_client.table.return_value.insert.assert_called_once_with(
@@ -325,6 +329,14 @@ _STORED_ROW = {
 }
 
 
+_NOT_SET_UP = {
+    "has_gateway_key": False,
+    "guardrails_reviewed": False,
+    "mcp_reviewed": False,
+    "tested": False,
+}
+
+
 def test_list_agents_never_returns_auth_header_value() -> None:
     database_client, database = _database()
     query = database_client.table.return_value.select.return_value.order.return_value
@@ -334,7 +346,7 @@ def test_list_agents_never_returns_auth_header_value() -> None:
     response = client.get("/api/v1/agents")
 
     assert response.status_code == 200
-    assert response.json() == {"data": [_STORED_ROW], "total": 1}
+    assert response.json() == {"data": [{**_STORED_ROW, **_NOT_SET_UP}], "total": 1}
 
 
 def test_list_agents_returns_agents_registered_before_a2a() -> None:
@@ -587,3 +599,66 @@ def test_delete_agent_that_is_missing_or_not_owned_is_404_and_leaves_bindings_al
 
     assert client.delete(AGENT_URL).status_code == 404
     table.assert_called_once_with("agents")
+
+
+def test_agent_reports_setup_progress_but_never_the_key_hash() -> None:
+    database_client, database = _database()
+    query = (
+        database_client.table.return_value.select.return_value.eq.return_value.limit.return_value
+    )
+    query.execute.return_value.data = [
+        {
+            **_STORED_ROW,
+            "gateway_key_hash": "a" * 64,
+            "guardrails_reviewed_at": "2026-10-08T10:00:00+00:00",
+            "mcp_reviewed_at": None,
+            "tested_at": "2026-10-08T10:05:00+00:00",
+        }
+    ]
+    app.dependency_overrides[get_agent_database] = lambda: database
+
+    body = client.get(f"/api/v1/agents/{_STORED_ROW['id']}").json()
+
+    assert body["has_gateway_key"] is True
+    assert body["guardrails_reviewed"] is True
+    assert body["mcp_reviewed"] is False
+    assert body["tested"] is True
+    assert "gateway_key_hash" not in body
+    assert "tested_at" not in body
+
+
+@pytest.mark.parametrize(
+    ("step", "column", "flag"),
+    [
+        ("guardrails", "guardrails_reviewed_at", "guardrails_reviewed"),
+        ("mcp", "mcp_reviewed_at", "mcp_reviewed"),
+    ],
+)
+def test_completing_a_setup_step_stamps_it_without_a_new_version(
+    step: str, column: str, flag: str
+) -> None:
+    database_client, database = _database()
+    table = database_client.table.return_value
+    table.update.return_value.eq.return_value.execute.return_value.data = [
+        {**_STORED_ROW, column: "2026-10-08T10:00:00+00:00"}
+    ]
+    app.dependency_overrides[get_agent_database] = lambda: database
+
+    response = client.post(f"/api/v1/agents/{_STORED_ROW['id']}/setup/{step}")
+
+    assert response.status_code == 200
+    assert response.json()[flag] is True
+    assert response.json()["config_version"] == 1
+    stamp = table.update.call_args.args[0]
+    assert set(stamp) == {column}
+    table.update.return_value.eq.assert_called_once_with("id", _STORED_ROW["id"])
+
+
+def test_completing_a_setup_step_rejects_unknown_steps_and_unknown_agents() -> None:
+    database_client, database = _database()
+    table = database_client.table.return_value
+    table.update.return_value.eq.return_value.execute.return_value.data = []
+    app.dependency_overrides[get_agent_database] = lambda: database
+
+    assert client.post(f"/api/v1/agents/{_STORED_ROW['id']}/setup/test").status_code == 422
+    assert client.post(f"/api/v1/agents/{_STORED_ROW['id']}/setup/mcp").status_code == 404

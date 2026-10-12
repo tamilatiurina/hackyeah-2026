@@ -1,19 +1,15 @@
-"""Where MCP servers are stored: Supabase when configured, otherwise memory.
+"""Where MCP servers are stored: each user's own registry in Supabase.
 
-Same pattern as app/guardrails/repository.py:
-
-- Supabase (SUPABASE_URL + SUPABASE_KEY set): queries run as the signed-in user with the token
-  the panel sends. The registry is shared, so any signed-in user can read and edit it. Secrets
-  are written but can never be selected back (see the mcp_servers migration). No token -> 401.
-- Otherwise (tests, local runs without Supabase): an in-memory dict.
+Same pattern as app/guardrails/repository.py: queries run as the signed-in user, so RLS shows
+and changes only their servers. Secrets are written but can never be selected back (see the
+mcp_servers migration).
 """
 
 from collections.abc import Callable
-from typing import Annotated, Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 import httpx
-from app.core.config import settings
-from app.core.supabase import get_supabase_for_user
+from app.core.auth import Me
 from app.mcp.models import (
     ApiKeyAuth,
     Auth,
@@ -22,10 +18,8 @@ from app.mcp.models import (
     McpServerCreate,
     McpServerUpdate,
     OAuthAuth,
-    summarize,
 )
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, status
 from postgrest import ReturnMethod
 from postgrest.exceptions import APIError
 from pydantic import ValidationError
@@ -37,8 +31,6 @@ TABLE = "mcp_servers"
 _COLUMNS = "id,name,url,auth_type,auth_header,oauth_client_id,oauth_scopes,allowed_tools"
 
 T = TypeVar("T")
-
-_bearer = HTTPBearer(auto_error=False)
 
 
 class NameTakenError(Exception):
@@ -110,75 +102,6 @@ def from_row(row: Any) -> McpServer:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "Stored MCP server is invalid"
         ) from error
-
-
-# in-memory: id -> public server (secrets are not kept in memory)
-_SERVERS: dict[str, McpServer] = {}
-# in-memory FR-17 access: (agent id, server id) -> the tools that agent may call
-ACCESS: dict[tuple[str, str], list[str]] = {}
-
-
-def reset_in_memory_servers() -> None:
-    _SERVERS.clear()
-    ACCESS.clear()
-
-
-def _sync_access(server_id: str, tools: list[str]) -> None:
-    """A tool removed from a server leaves every agent; an agent left with none loses the server
-    (the sync_agent_mcp_tools trigger does the same in Supabase)."""
-    for key, allowed in list(ACCESS.items()):
-        if key[1] != server_id:
-            continue
-        kept = [t for t in allowed if t in tools]
-        if kept:
-            ACCESS[key] = kept
-        else:
-            del ACCESS[key]
-
-
-class InMemoryMcpServerRepository:
-    def list(self) -> list[McpServer]:
-        return list(_SERVERS.values())
-
-    def get(self, server_id: str) -> McpServer | None:
-        return _SERVERS.get(server_id)
-
-    def add(self, server_id: str, body: McpServerCreate) -> McpServer:
-        if any(s.name.lower() == body.name.lower() for s in _SERVERS.values()):
-            raise NameTakenError
-        server = from_row(to_row(server_id, body))
-        _SERVERS[server_id] = server
-        return server
-
-    def update(self, server_id: str, changes: McpServerUpdate) -> McpServer | None:
-        current = _SERVERS.get(server_id)
-        if current is None:
-            return None
-        if changes.name is not None and any(
-            s.id != server_id and s.name.lower() == changes.name.lower() for s in _SERVERS.values()
-        ):
-            raise NameTakenError
-        updated = current.model_copy(
-            update={
-                "name": changes.name if changes.name is not None else current.name,
-                "url": changes.url if changes.url is not None else current.url,
-                "auth": summarize(changes.auth) if changes.auth is not None else current.auth,
-                "allowed_tools": (
-                    list(changes.allowed_tools)
-                    if changes.allowed_tools is not None
-                    else current.allowed_tools
-                ),
-            }
-        )
-        _SERVERS[server_id] = updated
-        if changes.allowed_tools is not None:
-            _sync_access(server_id, updated.allowed_tools)
-        return updated
-
-    def delete(self, server_id: str) -> bool:
-        for key in [k for k in ACCESS if k[1] == server_id]:
-            del ACCESS[key]
-        return _SERVERS.pop(server_id, None) is not None
 
 
 class SupabaseMcpServerRepository:
@@ -270,20 +193,6 @@ class SupabaseMcpServerRepository:
         return True
 
 
-def supabase_configured() -> bool:
-    return bool(settings.SUPABASE_URL and settings.SUPABASE_KEY)
-
-
-def get_mcp_server_repository(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-) -> McpServerRepository:
-    """FastAPI dependency: the signed-in user's Supabase view, or memory without Supabase."""
-    if not supabase_configured():
-        return InMemoryMcpServerRepository()
-    if credentials is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "Sign in to use MCP servers",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return SupabaseMcpServerRepository(get_supabase_for_user(credentials.credentials))
+def get_mcp_server_repository(user: Me) -> McpServerRepository:
+    """FastAPI dependency: the signed-in user's MCP servers."""
+    return SupabaseMcpServerRepository(user.client)

@@ -141,6 +141,14 @@ class Agent(BaseModel):
     """Snapshot of the Agent Card; null for agents registered before A2A."""
     config_version: int = 1
     """FR-02: goes up by one every time a saved change alters the agent's configuration."""
+    has_gateway_key: bool = False
+    """The agent is live: a gateway key exists. The key and its hash are never returned."""
+    guardrails_reviewed: bool = False
+    """The owner finished the guardrails setup step, even with nothing attached."""
+    mcp_reviewed: bool = False
+    """The owner finished or skipped the optional MCP tools setup step."""
+    tested: bool = False
+    """A test-chat call has gone through the guarded pipeline."""
 
 
 class AgentList(BaseModel):

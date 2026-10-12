@@ -4,8 +4,8 @@ Issue: #54 (D-01 App shell on the mock API). Date: 2026-10-03.
 
 ## Goal
 
-Replace the Vite starter in `apps/web` with the Guardrail Hub control panel shell from the
-"Guardrail Hub Control Panel" prototype, so the D-02..D-06 and E-03 screens can be built on it.
+Replace the Vite starter in `apps/web` with the AgentsOnRails.dev control panel shell from the
+"AgentsOnRails.dev Control Panel" prototype, so the D-02..D-06 and E-03 screens can be built on it.
 
 ## Scope
 
